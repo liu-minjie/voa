@@ -1,0 +1,19 @@
+#!/usr/bin/env node
+
+const config = require('../config');
+const graceful = require('graceful');
+
+const app = require('../app');
+app.set('port', config.port || process.env.PORT || 3330);
+
+const server = app.listen(app.get('port'), function () {
+  const util = require('../util');
+  const logger = util.logger.voa;
+
+  logger.info(`NODE_ENV = ${process.env.NODE_ENV}`);
+  logger.info(`Visit http://127.0.0.1:${server.address().port}/${config.homePage || ''}`);
+});
+
+
+
+module.exports = server;

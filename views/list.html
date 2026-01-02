@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>voa list</title>
+  <style type="text/css">
+    .list {
+      margin: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="list">
+    
+  </div>
+<script type="text/javascript">
+  const list = {{{list}}};
+  const container = document.querySelector('.list');
+  container.innerHTML = `<ul>
+    ${list.map((it) => {
+      return `<li><a href="/voa/${it}" target="_blank">${it}</a></li>`
+    }).join('')}
+  </ul>`;
+</script>
+</body>
+</html>
