@@ -126,7 +126,7 @@ router.get('/videos/:name', function(req, res, next) {
             return next(err);
         }
     } else {
-        console.log(`[Success] 视频传输完成: ${fileName}`);
+        console.log(`[Success] 视频传输完成: ${req.params.name}`);
     }
   });
 });
