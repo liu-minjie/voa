@@ -142,7 +142,30 @@ router.post('/extract', (req, res) => {
 		if (error) return res.status(500).json({ error: error.message });
 		videoJson[videoName] = 1;
 		fs.writeFileSync('./video.json', JSON.stringify(videoJson, null, 2), 'utf8');
-		res.json({ message: "Success", output: stdout });
+
+		const oldMp3 = `./video/mp3/${videoName.replace('mp4', 'mp3')}`
+		if (fs.existsSync(oldMp3)) {
+			const dir = videoName.replace('.mp4', '');
+			fs.rename(oldMp3, `./media/o/${dir}/${dir}.mp3`, (err) => {
+				if (err) {
+					return res.status(500).json({ error: err.message });
+				}
+				videoJson[videoName] = 2;
+				fs.writeFileSync('./video.json', JSON.stringify(videoJson, null, 2), 'utf8');
+				res.json({ success: true });
+			});
+		} else {
+			const dir = videoName.replace('.mp4', '');
+			const src = path.join(__dirname, `../video/${videoName}`);
+			const dst = path.join(__dirname, `../media/o/${dir}/${dir}.mp3`);
+			const cmd = `ffmpeg -i "${src}" -q:a 0 -map a "${dst}"`
+			exec(cmd, (error, stdout, stderr) => {
+				if (error) return res.status(500).json({ error: error.message });
+				videoJson[videoName] = 2;
+				fs.writeFileSync('./video.json', JSON.stringify(videoJson, null, 2), 'utf8');
+				res.json({ success: true });
+			})
+		}
 	});
 });
 
