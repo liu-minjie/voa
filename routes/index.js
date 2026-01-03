@@ -135,17 +135,27 @@ router.get('/videos/:name', function(req, res, next) {
 
 
 router.post('/extract', (req, res) => {
-    const { videoName, y_start, y_end, x_start, x_end } = req.body;
-    
-    const cmd = `docker exec srt_worker_final python3 /app/extract_srt.py "/app/video/${videoName}" ${y_start} ${y_end} ${x_start} ${x_end}`;
-    
-    
-    exec(cmd, (error, stdout, stderr) => {
-        if (error) return res.status(500).json({ error: error.message });
-        videoJson[videoName] = 1;
-	fs.writeFileSync('./video.json', JSON.stringify(videoJson, null, 2), 'utf8');
-        res.json({ message: "Success", output: stdout });
-    });
+	const { videoName, y_start, y_end, x_start, x_end } = req.body;
+	const cmd = `docker exec srt_worker_final python3 /app/extract_srt.py "/app/video/${videoName}" ${y_start} ${y_end} ${x_start} ${x_end}`;
+	
+	exec(cmd, (error, stdout, stderr) => {
+		if (error) return res.status(500).json({ error: error.message });
+		videoJson[videoName] = 1;
+		fs.writeFileSync('./video.json', JSON.stringify(videoJson, null, 2), 'utf8');
+		res.json({ message: "Success", output: stdout });
+	});
+});
+
+router.post('/videos/rename', (req, res) => {
+	const { videoName, newName } = req.body;
+	let msg = '';
+	try {
+		fs.renameSync(`./video/${videoName}`, `./video/${newName}.mp4`);
+	} catch(err) {
+		console.log(err);
+		msg = err.message;
+	}
+	res.json({ success: !msg, message: msg });
 });
 
 module.exports = router;
