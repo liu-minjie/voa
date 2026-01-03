@@ -34,7 +34,7 @@ router.get('/voa/:month', function(req, res, next) {
 router.get('/voa/:month/:name', function(req, res, next) {
 	try {
 		const lrc = fs.readFileSync(`./media/${req.params.month}/${req.params.name}/${req.params.name}.lrc`, { encoding: 'utf8'});
-		const txt = fs.readFileSync(`./media/${req.params.month}/${req.params.name}/${req.params.name}.txt`, { encoding: 'utf8'});
+		const txt = req.params.month === 'o' ? '' : fs.readFileSync(`./media/${req.params.month}/${req.params.name}/${req.params.name}.txt`, { encoding: 'utf8'});
 		res.render('index', {
 			
 			data: JSON.stringify({
