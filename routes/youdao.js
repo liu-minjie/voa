@@ -105,3 +105,180 @@
 }
 
 */
+
+
+
+
+
+
+/*
+const sqlite3 = require('sqlite3').verbose();
+const fs = require('fs');
+
+// 路径已修改为当前目录
+const dbPath = './wordbook.db';
+const outputPath = './youdao_final_fixed.json';
+
+const db = new sqlite3.Database(dbPath);
+
+async function exportAll() {
+    const tables = ['NEW_WORDBOOK_TABLE', 'REMTABLE'];
+    let finalItems = [];
+    let seen = new Set(); // 防止重复提取
+
+    for (const table of tables) {
+        await new Promise((resolve) => {
+            // 使用 SELECT * 避免字段名不一致报错
+            db.all(`SELECT * FROM ${table} WHERE state = 0`, [], (err, rows) => {
+                if (err || !rows) return resolve();
+
+                rows.forEach(row => {
+                    const timestamp = row.create_time || row.clientModifiedTime || 0;
+                    const timeStr = new Date(timestamp).toLocaleString('zh-CN');
+                    const rawContent = (row.name || row.word || "").trim();
+
+                    try {
+                        const data = JSON.parse(row.trans);
+                        
+                        // --- 逻辑 1: 深度挖掘“藏在单词里的句子”（例句收藏） ---
+                        // 这种情况原文(name)可能是个单词，但 JSON 里存了你想收藏的句子
+                        if (data.trs && data.trs[0] && data.trs[0].sentence) {
+                            data.trs[0].sentence.forEach(s => {
+                                const en = (s.en || s.enShow || "").replace(/<[^>]+>/g, '').trim();
+                                if (en && !seen.has(en)) {
+                                    seen.add(en);
+                                    finalItems.push({
+                                        "原文": en,
+                                        "翻译": s.zh || "",
+                                        "时间": timeStr,
+                                        "ts": timestamp,
+                                        "来源": "单词关联例句"
+                                    });
+                                }
+                            });
+                        }
+
+                        // --- 逻辑 2: 提取本身就是句子的条目 ---
+                        // 规则：包含空格且长度大于 10 (有效避开大部分纯单词)
+                        const cleanContent = rawContent.replace(/<[^>]+>/g, '');
+                        if (cleanContent.includes(' ') && cleanContent.length > 10 && !seen.has(cleanContent)) {
+                            let tran = "";
+                            if (data.trs && data.trs[0]) {
+                                tran = data.trs[0].tran || data.trs[0].zh || "";
+                            }
+                            if (!tran && data.translate) tran = data.translate;
+
+                            seen.add(cleanContent);
+                            finalItems.push({
+                                "原文": cleanContent,
+                                "翻译": tran,
+                                "时间": timeStr,
+                                "ts": timestamp,
+                                "来源": "独立收藏句子"
+                            });
+                        }
+                    } catch (e) {
+                        // JSON 解析失败
+                    }
+                });
+                resolve();
+            });
+        });
+    }
+
+    // 按时间由旧到新排序
+    finalItems.sort((a, b) => a.ts - b.ts);
+
+    fs.writeFileSync(outputPath, JSON.stringify(finalItems, null, 2), 'utf8');
+    console.log(`--- 导出成功 ---`);
+    console.log(`总计提取到句子: ${finalItems.length} 条`);
+    console.log(`文件位置: ${outputPath}`);
+}
+
+exportAll().then(() => db.close());
+
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+const sqlite3 = require('sqlite3').verbose();
+const fs = require('fs');
+const path = require('path');
+
+const dbPath =  './wordbook.db';
+const outputPath = './youdao_all_sentences.json';
+
+const db = new sqlite3.Database(dbPath);
+
+// 修改点：增加了 ORDER BY create_time ASC
+const sql = `SELECT name, trans, create_time FROM NEW_WORDBOOK_TABLE WHERE state = 0 ORDER BY create_time DESC`;
+
+db.all(sql, [], (err, rows) => {
+    if (err) {
+        console.error("查询失败:", err.message);
+        return;
+    }
+
+    let sentenceList = [];
+
+    rows.forEach(row => {
+        try {
+            const data = JSON.parse(row.trans);
+            
+            // 提取逻辑 A：解析 trs 里的例句结构
+            if (data.trs && data.trs[0] && data.trs[0].sentence) {
+                data.trs[0].sentence.forEach(s => {
+                    sentenceList.push({
+                        "原文": (s.en || s.enShow || "").replace(/<[^>]+>/g, ''),
+                        "翻译": s.zh || "",
+                        "类型": "收藏例句",
+                        "添加时间": new Date(row.create_time).toLocaleString('zh-CN'),
+                        "timestamp": row.create_time
+                    });
+                });
+            } 
+            // 提取逻辑 B：如果本身原文就是长句子
+            else if (row.name && row.name.includes(' ') && row.name.length > 10) {
+                let tran = "";
+                if (data.trs && data.trs[0]) tran = data.trs[0].tran || "";
+                
+                sentenceList.push({
+                    "原文": row.name,
+                    "翻译": tran,
+                    "类型": "独立长句",
+                    "添加时间": new Date(row.create_time).toLocaleString('zh-CN'),
+                    "timestamp": row.create_time
+                });
+            }
+        } catch (e) {
+            // 忽略 JSON 解析错误的条目
+        }
+    });
+
+    // 最终在内存中再强制排序一次（确保万无一失）
+    sentenceList.sort((a, b) => b.timestamp - a.timestamp);
+
+    fs.writeFileSync(outputPath, JSON.stringify(sentenceList, null, 2), 'utf8');
+    
+    console.log(`--- 导出报告 ---`);
+    console.log(`排序完成！共提取到句子: ${sentenceList.length} 条`);
+    console.log(`文件已存至: ${outputPath}`);
+});
+ 
+db.close();
+
+
+find ~/Library/Containers/com.youdao.YoudaoDict/Data/Library/com.youdao.YoudaoDict -name "*.db"
+sqlite3 ~/Desktop/wordbook.db ".tables"
+*/
