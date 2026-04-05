@@ -17,12 +17,12 @@ function ensureJson(filePath, initialData = {}) {
   }
 }
 
-ensureJson('./baseinfo.json', []);
-ensureJson('./image.json', []);
-ensureJson('./image_remove.json', []);
-ensureJson('./video.json', []);
-ensureJson('./video_remove.json', []);
-ensureJson('./record.json', []);
+ensureJson('./routes/baseinfo.json', []);
+ensureJson('./routes/image.json', []);
+ensureJson('./routes/image_remove.json', []);
+ensureJson('./routes/video.json', []);
+ensureJson('./routes/video_remove.json', []);
+ensureJson('./routes/record.json', []);
 
 function crossDomain(req, res) {
   res.header('Access-Control-Allow-Origin', '*');
