@@ -2,3 +2,10 @@ node_modules
 logs
 video
 media
+routes/baseinfo.json
+routes/image.json
+routes/image_remove.json
+routes/video.json
+routes/video_remove.json
+routes/record.json
+upload

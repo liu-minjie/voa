@@ -5,7 +5,7 @@ const request = require('request');
 const fs = require('fs');
 const path = require('path');
 const util = require('../util');
-const videoJson = require('./video.json');
+const videoJson = require('./english.json');
 const { exec } = require('child_process');
 
 /* GET home page. */
@@ -141,7 +141,7 @@ router.post('/extract', (req, res) => {
 	exec(cmd, (error, stdout, stderr) => {
 		if (error) return res.status(500).json({ error: error.message });
 		videoJson[videoName] = 1;
-		fs.writeFileSync('./routes/video.json', JSON.stringify(videoJson, null, 2), 'utf8');
+		fs.writeFileSync('./routes/english.json', JSON.stringify(videoJson, null, 2), 'utf8');
 
 		const oldMp3 = `./video/mp3/${videoName.replace('mp4', 'mp3')}`
 		if (fs.existsSync(oldMp3)) {
@@ -151,7 +151,7 @@ router.post('/extract', (req, res) => {
 					return res.status(500).json({ error: err.message });
 				}
 				videoJson[videoName] = 2;
-				fs.writeFileSync('./routes/video.json', JSON.stringify(videoJson, null, 2), 'utf8');
+				fs.writeFileSync('./routes/english.json', JSON.stringify(videoJson, null, 2), 'utf8');
 				res.json({ success: true });
 			});
 		} else {
@@ -162,7 +162,7 @@ router.post('/extract', (req, res) => {
 			exec(cmd, (error, stdout, stderr) => {
 				if (error) return res.status(500).json({ error: error.message });
 				videoJson[videoName] = 2;
-				fs.writeFileSync('./routes/video.json', JSON.stringify(videoJson, null, 2), 'utf8');
+				fs.writeFileSync('./routes/english.json', JSON.stringify(videoJson, null, 2), 'utf8');
 				res.json({ success: true });
 			})
 		}

@@ -28,11 +28,18 @@ app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'html');
 
 
+['./upload/avatar', './upload/image/remove', './upload/video/remove'].forEach((item) => {
+  const uploadDir = path.join(__dirname, item);
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+});
 
 // uncomment after placing your favicon in /public
 //var favicon = require('serve-favicon');
 //app.use(favicon(__dirname + '/public/favicon.ico'));
 app.use('/public', express.static(path.join(__dirname, 'public')));
+app.use('/baby/avatar', express.static(path.join(__dirname, 'upload/avatar')));
 
 
 
@@ -51,6 +58,7 @@ const routes = require('./routes/index');
 
 
 //page
+app.use('/baby', require('./routes/baby'))
 app.use('/', routes);
 
 

@@ -1,13 +1,19 @@
 #!/usr/bin/env node
 
 const config = require('../config');
-const graceful = require('graceful');
-
+const https = require('https');
+const path = require('path');
+const fs = require('fs');
 const app = require('../app');
+const options = {
+    key: fs.readFileSync(path.join(__dirname, './key.pem')),
+    cert: fs.readFileSync(path.join(__dirname, './cert.pem'))
+};
 app.set('port', config.port || process.env.PORT || 3330);
 
-const server = app.listen(app.get('port'), function () {
-  const util = require('../util');
+const server = https.createServer(options, app);
+server.listen(app.get('port'), function () {
+   const util = require('../util');
   const logger = util.logger.voa;
 
   logger.info(`NODE_ENV = ${process.env.NODE_ENV}`);
