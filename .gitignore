@@ -8,4 +8,5 @@ routes/image_remove.json
 routes/video.json
 routes/video_remove.json
 routes/record.json
+routes/record_remove.json
 upload
