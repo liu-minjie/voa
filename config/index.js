@@ -17,7 +17,12 @@ module.exports = {
       type: 'file',
       filename: logDir + '/voa.log',
       category: 'voa'
+    },, {
+      type: 'file',
+      filename: logDir + '/baby.log',
+      category: 'baby'
     }],
+    babyLogLevel: 'WARN',
     voaLogLevel: 'WARN',
     replaceConsole: true
   }

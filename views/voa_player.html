@@ -1,0 +1,354 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no,minimal-ui">
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="format-detection" content="telephone=no"/>
+<meta name="format-detection" content="email=no"/>
+<meta name="screen-orientation" content="portrait">
+<meta name="x5-orientation" content="portrait">
+<META HTTP-EQUIV="Pragma" CONTENT="no-cache">
+<META HTTP-EQUIV="Cache-Control" CONTENT="no-cache">
+<META HTTP-EQUIV="Expires" CONTENT="0">
+<title>voa</title>
+<link href="/public/webr8/webr8.m.css" rel="stylesheet"/>
+</head>
+<body id='bdy'>
+<div id='pagewrap'>
+  <div id='header' style="display: none;"> </div>
+  <div id='main'>
+    <div id='content'>
+      <div id='navi'>
+        <a href='/' target='_blank'>首页</a> > 
+        <a class="cate" href='/' target='_blank'></a> > 正文
+      </div>
+      <div id='title'>
+        <h2></h2>
+        <h3></h3>
+      </div>
+      <div id='playerblock'>
+        <div id='playerwrap'>
+          <audio id='ap'>您设备上的浏览器不支持HTML5</audio>
+          <video id='vp'></video>
+          <div style="display: flex; align-items: center;">
+            <div id='infobox'>
+              <div id='timebox'>00:00 / 00:00</div>
+              <div id='srcname' style="display: none;"></div>
+              <div style='clear: both;'></div>
+            </div>
+            <div id='slider' style="flex: 1;;">
+              <div id="slider-frame">
+                <div id='slider-r'>
+                  <div id='slider-play'></div>
+                </div>
+              </div>
+              <div id='lblB' class='lblAB'></div>
+              <div id='lblA' class='lblAB'></div>
+            </div>
+          </div>
+
+          <div id='btns'>
+            <button id='btnPlay' title="播放/暂停"></button>
+            <button id='btnStop' title="停止"></button>
+            <button id='btnBf' title="倒退3秒/倒退AB段"></button>
+            <button id='btnFf' title="快进3秒/前进AB段"></button>
+            <!-- <button id='btnLast'></button><button id='btnNext'></button>-->
+            <button id='btnX' title="左右拖动变速，单击恢复">1.0</button>
+            <button id='btnP' title="复读暂停时间"></button>
+            <button id='btnR' title="即时复读5秒/取消"></button>
+            <button id='btnA' title="设置A点"></button>
+            <button id='btnB' title="设置B点"></button>
+            <button id='btnC' title="取消复读并清除AB点"></button>
+          </div>
+          <!--btnsTC1-->
+          <div id='btnsTC'>
+            <button id='btnTCPlay' title='播放一行'></button>
+            <button id='btnTCStop' title='停止播放'></button>
+            <button id='btnTCBf' title='后退一行'></button>
+            <button id='btnTCFf' title='前进一行'></button>
+            <button id='btnTCRline' title='复读一行'></button>
+            <button id='btnTCRlines' title='复读多行'></button>
+            <button id='btnTCXRline' title='变速复读一行'></button>
+            <button id='btnTCXRlines' title='变速复读多行'></button>
+          </div>
+          <!--btnsTC2-->
+          <div id='promptbar'> 
+            <!-- <a id='usage' href='javascript:seeusage()'>播放器使用说明</a> -->
+            <div id='btn-usage' title='复读机使用说明'></div>
+            <div id='btn-edit' title='打开/关闭编辑窗'></div>
+            <div id='btn-src' title='打开/关闭源文窗'></div>
+            <div id='btns-download' style="display: none;"> 
+              <!--btndltxt1--><a id='btndl-txt' href="" title='下载文本'>
+              <div>TXT</div>
+              </a><!--btndltxt2--> 
+              <!--btndllrc1--><a id='btndl-lrc' href="" title='下载LRC'>
+              <div>LRC</div>
+              </a><!--btndllrc2--> 
+              <!--btndlmp31--><a id='btndl-mp3' href="" title='下载MP3音频'>
+              <div>MP3</div>
+              </a><!--btndlmp32--> 
+               
+            </div>
+             
+          </div>
+          <div id='usagecontent'>
+      <div id='uctitle'>复读宝 RABC v8.0beta 复读机按钮使用说明</div>
+            <div id='uc1'>
+              <div style='background-image: url(/public/webr8/img/play.png)'>播放/暂停</div>
+              <div style='background-image: url(/public/webr8/img/stop.png)'>停止</div>
+              <div style='background-image: url(/public/webr8/img/bf.png)'>播放时:倒退3秒/复读时:回退AB段</div>
+              <div style='background-image: url(/public/webr8/img/ff.png)'>播放时:快进3秒/复读时:前进AB段</div>
+              <div style='background-image: url(/public/webr8/img/X.png)'>拖动:改变速度/点击:恢复正常速度1.0</div>
+              <div style='background-image: url(/public/webr8/img/clock.png)'>拖动改变复读暂停时间</div>
+              <div style='background-image: url(/public/webr8/img/R.png)'>点击:复读最近5秒/拖动:改变复读次数</div>
+              <div style='background-image: url(/public/webr8/img/A.png)'>设置A点</div>
+              <div style='background-image: url(/public/webr8/img/B.png)'>设置B点</div>
+              <div style='background-image: url(/public/webr8/img/C.png)'>取消复读并清除AB点</div>
+            </div>
+            <!--uc21-->
+            <div id='uc2'>
+              <div style='background-image: url(/public/webr8/img/[play].png)'>播放一行</div>
+              <div style='background-image: url(/public/webr8/img/[stop].png)'>停止播放</div>
+              <div style='background-image: url(/public/webr8/img/TC_left.png)'>后退一行</div>
+              <div style='background-image: url(/public/webr8/img/TC_right.png)'>前进一行</div>
+              <div style='background-image: url(/public/webr8/img/[R].png)'>复读一行</div>
+              <div style='background-image: url(/public/webr8/img/[R]...png);padding-left:36px'>复读多行</div>
+              <div style='background-image: url(/public/webr8/img/[R]~.png);padding-left:36px'>变速复读一行</div>
+              <div style='background-image: url(/public/webr8/img/[R]~...png);padding-left:36px'>变速复读多行</div>
+            </div>
+            <!--uc22--> 
+          </div>
+          <div id="editWin" style="display:none;">
+            <div id="editWinBar">
+              <div id="barTitle1">编 辑 窗</div>
+              <div id="plus1" onclick="fontSize(event, 0, 1)">大字</div>
+              <div id="minus1" onclick="fontSize(event, 0, -1)">小字</div>
+              <div id="reset1" onclick="editWinForm.reset()">&nbsp;重写&nbsp;</div>
+              <div id="save1" onclick="send()">&nbsp;保存&nbsp;</div>
+            </div>
+            <form id="editWinForm" name="editWinForm" method="post" action="/public/webr8/savemytext.php">
+              <textarea name="editWinText" id="editWinText"></textarea>
+            </form>
+          </div>
+        </div>
+        <div style='clear: both;'></div>
+      </div>
+      
+
+      <!--WORDS2-->
+      <div id=gg1> 
+        <!-- autofit#101 --> 
+
+ 
+      </div>
+      <!--srcWin1-->
+      <div id='srcWin'>
+        <div id='srcWinBarBlock'>
+          <div id="srcWinBar">
+            <div id="srcWinbarTitle1">
+              <div id='tablrc' class='tabshow'>LRC</div>
+              <div id='tabtxt'>TXT</div>
+            </div>
+            <div id="plus2" onclick="fontSize(event, 1, 1)">大字</div>
+            <div id="minus2" onclick="fontSize(event, 1, -1)">小字</div>
+            <div id="srcWinBarPart" onclick="$('#lrc').css({'height':'300px', 'overflowY':'scroll'})">滚动</div>
+            <div id="srcWinBarFull" onclick="$('#lrc').css({'height':'auto', 'overflowY':'visible'})">全页</div>
+          </div>
+        </div>
+        <div id='lrc'></div>
+        <div id='txt'></div>
+      </div>
+    </div>
+
+  </div>
+
+  <br>
+  <br>
+</div>
+<script src="/public/js/jquery/jquery-3.6.0.min.js"></script> 
+<script type="text/javascript">
+  const data = {{{data}}};
+  const timeArr = [];
+
+  const lrcList = data.lrc.split('\n').filter((it) => {
+    return !!it.trim().match(/^\[\d\d:/)
+  }).map((it) => {
+    it = it.trim();
+    const match = it.match(/^\[(\d\d:\d\d\.\d\d)\]/);
+    if (match) {
+      const time = match[1];
+      const h = parseFloat(time);
+      const m = parseFloat(time.slice(3,5));
+      const v = parseFloat(h * 60 + m + time.slice(5));
+      timeArr.push(parseFloat(v.toFixed(2)));
+    }
+    return it.replace(/^\[\d\d:\d\d\.\d\d\]/, '');
+  });
+  const lrcDom = document.getElementById('lrc');
+  lrcDom.innerHTML = lrcList.map((it, i) => {
+    return `<div><span>${i+1}</span>
+        <li>${it}</li>
+    </div>`
+  }).join('');
+
+
+  const sep = data.txt.indexOf('\n\n\n') === -1 ? '\r\n\r\n' : '\n\n\n';
+  const txtList = data.txt ? (sep === '\n\n\n' ? data.txt.split(sep)[1].split('\n\n') : data.txt.split(sep))  : [];
+  const txtDom = document.getElementById('txt');
+  txtDom.innerHTML = txtList.map((it, i) => {
+    return `<span>${i+1}</span><li>${it}</li>`
+  }).join('');
+
+  
+
+  progfilename = data.name;
+  mp3filename = `/media/${data.month}/${encodeURI(data.name)}`
+  txt=' ';lrc=' ';mp3=' ';mp4='';vf='';
+  tc=timeArr;
+
+  const titleDom = document.getElementById('title');
+  const part = data.name.split('] ')
+  titleDom.querySelector('h2').innerHTML = part[1];
+  titleDom.querySelector('h3').innerHTML = data.name.slice(0,10);
+  const naviDom = document.getElementById('navi');
+  naviDom.querySelector('.cate').innerHTML = part[0].slice(12);
+</script> 
+<script src="/public/webr8/webr8.m.js"></script> 
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+      document.body.style.opacity = '0';
+      const head = document.getElementsByTagName('head')[0];
+      let style = document.getElementById('lrc-style');
+      if (style) {
+        return
+      }
+
+      style = document.createElement('style');
+      style.id = 'lrc-style';
+      style.type = 'text/css';
+      head.appendChild(style);
+
+      style.textContent = `  
+        #lrc > div {
+          position: relative
+        }
+        .lrc-tool {
+          position: absolute;
+          top: 0;
+          left: 15px;
+          width: calc(100% - 15px);
+          height: 100%;
+          background-color: #fff;
+          z-index: 10;
+          pointer-events: none;
+        }
+        .view-tool {
+          position: absolute;
+          top: 5px;
+          left: -20px;
+          width: 20px;
+          z-index: 11;
+          cursor: pointer;
+          display: inline-block;
+        }
+        .lrc-tool.view {
+          width: 50px;
+          left: -5px;
+        }
+        #lrc > div.active .lrc-tool {
+          background-color: #f00;
+        }
+        #lrc > div.view .lrc-tool {
+          background-color: transparent;
+        }
+        #lrc.view-all .lrc-tool {
+          background-color: transparent !important;
+        }
+      `
+
+
+
+      const lrc = document.getElementById('lrc');
+
+      function checkLRC (cb) {
+        const list = lrc.querySelectorAll(':scope > div');
+        if (list.length) {
+          return cb(list)
+        }
+        setTimeout(() => {
+          checkLRC(cb);
+        }, 1000);
+      }
+
+      checkLRC((list) => {
+        list.forEach((item) => {
+          const div = document.createElement('div');
+          div.className = 'lrc-tool';
+          item.appendChild(div);
+          item.addEventListener('click', itemClick);
+
+          const span = document.createElement('div');
+          span.innerText = '查';
+          span.className = 'view-tool'
+          span.addEventListener('click', spanClick);
+          item.appendChild(span);
+        });
+
+        document.body.style.opacity = '1';
+
+        const bar = document.getElementById('srcWinBar');
+        const view = document.createElement('label');
+        view.style.marginLeft = '10px';
+        view.style.cursor = 'pointer';
+        view.innerHTML = '查<input type="checkbox">';
+        bar.appendChild(view);
+        view.querySelector('input').addEventListener('change', (event) => {
+          lrc.classList.toggle('view-all', event.target.checked);
+          if (!event.target.checked) {
+           const list =  lrc.querySelectorAll('.view');
+           list.forEach((it) => {
+             it.classList.remove('view');
+           })
+          }
+        });
+
+        const next = document.createElement('span');
+        next.innerText = '下一句';
+        next.style.marginLeft = '10px';
+        next.style.cursor = 'pointer';
+        bar.appendChild(next);
+        next.addEventListener('click', () => {
+          const active = lrc.querySelector('.active');
+          if (active) {
+            if (active.nextElementSibling) {
+              active.nextElementSibling.querySelector('li').click();
+            }
+          } else {
+            const first = lrc.querySelectorAll(':scope > div')[0];
+            first && first.querySelector('li').click();
+          }
+
+        })
+      }); 
+
+
+      function itemClick(event) {
+        const target = event.currentTarget;
+        const active = lrc.querySelector('.active');
+        active && active.classList.remove('active');
+        target.classList.add('active');
+      }
+      function spanClick(event) {
+        event.stopPropagation();
+        event.preventDefault();
+        event.target.parentElement.classList.toggle('view');
+      }
+    })
+</script> 
+</body>
+</html>

@@ -28,7 +28,7 @@ app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'html');
 
 
-['./upload/avatar', './upload/image/remove', './upload/video/remove'].forEach((item) => {
+['./upload/avatar', './upload/image/remove', './upload/video/remove', './upload/image/thumb'].forEach((item) => {
   const uploadDir = path.join(__dirname, item);
   if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
@@ -59,6 +59,7 @@ const routes = require('./routes/index');
 
 //page
 app.use('/baby', require('./routes/baby'))
+app.use('/voa', require('./routes/voa'))
 app.use('/', routes);
 
 

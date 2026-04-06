@@ -4,6 +4,9 @@ const fs = require('fs');
 const path = require('path');
 const multiparty = require('multiparty');
 const moment = require('moment');
+const util = require('../util');
+
+const log = util.logger.baby;
 
 function ensureJson(filePath, initialData = {}) {
   if (!fs.existsSync(filePath)) {
@@ -13,7 +16,6 @@ function ensureJson(filePath, initialData = {}) {
     }
 
     fs.writeFileSync(filePath, JSON.stringify(initialData, null, 2), 'utf8');
-    return initialData;
   }
 }
 // 确保remove目录存在
@@ -50,11 +52,21 @@ function crossDomain(req, res) {
 router.get('/baseinfo', function(req, res) {
 	crossDomain(req, res);
 
+	let baseinfo = [];
+	let success = true;
+	try {
+
 	delete require.cache[require.resolve('./baseinfo.json')];
-	const baseinfo = require('./baseinfo.json');
+	baseinfo = require('./baseinfo.json');
+
+	} catch (err) {
+		success = false
+		log.error(err, 'get /baseinfo')
+	}
+
 	res.json({
-		success: true,
-		 data: baseinfo
+		success,
+		data: baseinfo
 	});
 });
 router.options('/baseinfo', function(req, res) {
@@ -65,6 +77,8 @@ router.options('/baseinfo', function(req, res) {
 });
 router.post('/baseinfo', function(req, res) {
 	crossDomain(req, res);
+	let success = true;
+	try {
 
 	delete require.cache[require.resolve('./baseinfo.json')];
 	const baseinfo = require('./baseinfo.json');
@@ -74,21 +88,31 @@ router.post('/baseinfo', function(req, res) {
 	data.avatar = data.avatar || (baseinfo.length ? baseinfo[0].avatar || '' : '')
 	baseinfo.unshift(data);
 	fs.writeFileSync('./routes/baseinfo.json', JSON.stringify(baseinfo, null, 2), 'utf8');
+
+	} catch (err) {
+		success = false
+		log.error(err, 'post /baseinfo')
+	}
+
 	res.json({
-		success: true
+		success,
+		message: '更新' + (success ? '成功' : '失败')
 	});
 });
 // 上传头像
-router.post('/upload-avatar',  function(req, res) {
+router.post('/baseinfo/avatar/upload',  function(req, res) {
 	crossDomain(req, res);
-
 
 	var form = new multiparty.Form({ uploadDir: './upload/avatar' });
 
   form.parse(req, function(err, fields, files) {
     if (err) {
+    	log.error(err, '/upload-avatar file');
       return res.status(500).send('上传失败');
     }
+
+    let success = true;
+		try {
 
     const part = files.avatar[0].path.split('/');
     const filename = part[part.length - 1];
@@ -103,10 +127,15 @@ router.post('/upload-avatar',  function(req, res) {
 			first.updateat = moment().format('YYYY-MM-DD HH:mm:ss')
 			fs.writeFileSync('./routes/baseinfo.json', JSON.stringify(baseinfo, null, 2), 'utf8');
 		}
+
+		} catch (err) {
+			success = false
+			log.error(err, '/upload-avatar')
+		}
 		
 		res.json({
-			success: true,
-			message: '上传成功',
+			success,
+			message: '上传' + (success ? '成功' : '失败'),
 			data: {
 				avatarUrl: avatarUrl,
 				filename: filename
@@ -116,29 +145,70 @@ router.post('/upload-avatar',  function(req, res) {
 });
 
 
-router.get('/image/item/:name', function(req, res) {
+router.get('/image/item/:name', function(req, res, next) {
 	const name = req.params.name
-	res.sendFile(path.join(__dirname, `../upload/image/${name}`), {}, (err) => {
-		err && console.log(err.message);
+  const thumb = req.query.thumb || '';
+  const thumbName = path.parse(name).name + '.webp';
+  let filePath = path.join(__dirname, thumb ? `../upload/image/thumb/${thumbName}` : `../upload/image/${name}`);
+  
+  // 检查文件是否存在
+  if (thumb && !fs.existsSync(filePath)) {
+    // 如果请求缩略图但缩略图不存在，使用原图
+    filePath = path.join(__dirname, `../upload/image/${name}`);
+  }
+  
+  // 再次检查文件是否存在
+  if (!fs.existsSync(filePath)) {
+    // 如果文件不存在，返回 404 状态码
+    res.status(404).send('File not found');
+    return;
+  }
+  
+  res.sendFile(filePath, {
+    maxAge: '3650d',
+    immutable: true
+  }, (err) => {
+		if (err) {
+      if (err.code !== 'ENOENT') {
+        log.error(err, '/image/item/:name');
+      } else if (!res.headersSent) {
+        res.status(404).send('File not found');
+        return;
+      } 
+      
+      // 如果响应还未发送，返回 500 错误
+      if (!res.headersSent) {
+        res.status(500).send('Internal server error');
+      }
+		}
 	});
 });
 router.get('/image/list', function(req, res) {
 	crossDomain(req, res);
+	let image = [];
+	let success = true;
+	try {
 
 	delete require.cache[require.resolve('./image.json')];
-	const image = require('./image.json');
+	image = require('./image.json');
+
+	} catch (err) {
+		success = false
+		log.error(err, '/image/list')
+	}
+
 	res.json({
-		success: true,
-		 data: image
+	  success,
+		data: image
 	});
 });
-router.options('/upload-image',  function(req, res) {
+router.options('/image/upload',  function(req, res) {
 	crossDomain(req, res);
 	res.json({
 		success: true
 	});
 });
-router.post('/upload-image',  function(req, res) {
+router.post('/image/upload',  function(req, res) {
 	crossDomain(req, res);
 
 
@@ -146,14 +216,30 @@ router.post('/upload-image',  function(req, res) {
 
   form.parse(req, function(err, fields, files) {
     if (err) {
+    	log.error(err, '/upload-image file');
       return res.status(500).send('上传失败');
     }
 
+    let filename = '';
+    let success = true;
+		try {
+
 
     const part = files.image[0].path.split('/');
-    const filename = part[part.length - 1];
+    filename = part[part.length - 1];
 
     const type = fields.type ? fields.type[0] : '';
+
+    if (files.thumb) {
+      const thumbDir = './upload/image/thumb';
+      if (!fs.existsSync(thumbDir)) {
+        fs.mkdirSync(thumbDir, { recursive: true });
+      }
+      const thumbPath = files.thumb[0].path;
+      const thumbName = path.parse(filename).name + '.webp';
+      const targetThumbPath = path.join(thumbDir, thumbName);
+      fs.renameSync(thumbPath, targetThumbPath);
+    }
 
     // 只有相册图片才保存到image.json
     if (type === 'gallery') {
@@ -170,9 +256,14 @@ router.post('/upload-image',  function(req, res) {
       fs.writeFileSync('./routes/image.json', JSON.stringify(image, null, 2), 'utf8');
     }
 
+    } catch (err) {
+			success = false
+			log.error(err, '/upload-image')
+		}
+
 		res.json({
-			success: true,
-			message: '上传成功',
+			success,
+			message: '上传' + (success ? '成功' : '失败'),
 			data: {
 				filename: filename
 			}
@@ -188,6 +279,8 @@ router.options('/image/delete', function(req, res) {
 });
 router.post('/image/delete', function(req, res) {
 	crossDomain(req, res);
+	let success = true;
+	try {
 
 	delete require.cache[require.resolve('./image.json')];
 	const images = require('./image.json');
@@ -213,9 +306,8 @@ router.post('/image/delete', function(req, res) {
 				const removeDir = ensureRemoveDir(path.join(__dirname, '../upload/image'));
 				const targetPath = path.join(removeDir, photoToDelete.name);
 				fs.renameSync(photoPath, targetPath);
-				console.log(`移动照片文件到remove目录: ${photoToDelete.name}`);
-			} catch (error) {
-				console.error(`移动照片文件失败: ${error.message}`);
+			} catch (err) {
+				log.error(err, '/image/delete renameSync')
 			}
 		}
 	}
@@ -225,14 +317,19 @@ router.post('/image/delete', function(req, res) {
 	const imageRemoveData = ensureRemoveJson(imageRemoveJsonPath);
 	imageRemoveData.unshift(photoToDelete);
 	fs.writeFileSync(imageRemoveJsonPath, JSON.stringify(imageRemoveData, null, 2), 'utf8');
-	console.log(`移动照片记录到image_remove.json: ${photoToDelete.id}`);
 
 	// 从数组中删除照片
 	images.splice(photoIndex, 1);
 	fs.writeFileSync('./routes/image.json', JSON.stringify(images, null, 2), 'utf8');
+
+	} catch (err) {
+		success = false
+		log.error(err, '/image/delete')
+	}
+
 	res.json({
-		success: true,
-		message: '删除成功'
+		success,
+		message: '删除'  + (success ? '成功' : '失败')
 	});
 });
 // 更新图片
@@ -244,6 +341,8 @@ router.options('/image/update', function(req, res) {
 });
 router.post('/image/update', function(req, res) {
 	crossDomain(req, res);
+	let success = true;
+	try {
 
 	delete require.cache[require.resolve('./image.json')];
 	const images = require('./image.json');
@@ -270,9 +369,15 @@ router.post('/image/update', function(req, res) {
 	};
 
 	fs.writeFileSync('./routes/image.json', JSON.stringify(images, null, 2), 'utf8');
+
+	} catch (err) {
+		success = false
+		log.error(err, '/image/update')
+	}
+
 	res.json({
-		success: true,
-		message: '更新成功'
+		success,
+		message: '更新' + (success ? '成功' : '失败')
 	});
 });
 
@@ -280,29 +385,52 @@ router.post('/image/update', function(req, res) {
 
 
 
-router.get('/video/item/:name', function(req, res) {
+router.get('/video/item/:name', function(req, res, next) {
 	const name = req.params.name
-	res.sendFile(path.join(__dirname, `../upload/video/${name}`), {}, (err) => {
-		err && console.log(err.message);
+	res.sendFile(path.join(__dirname, `../upload/video/${name}`), {
+    maxAge: '3650d',
+    immutable: true
+  }, (err) => {
+		if (err) {
+      if (err.code !== 'ENOENT') {
+        log.error(err, '/video/item/:name');
+      } else if (!res.headersSent) {
+        res.status(404).send('File not found');
+        return;
+      } 
+		}
+    
+    if (!res.headersSent) {
+      return next(err);
+    }
 	});
 });
 router.get('/video/list', function(req, res) {
 	crossDomain(req, res);
+	let video = [];
+	let success = true;
+	try {
 
 	delete require.cache[require.resolve('./video.json')];
-	const video = require('./video.json');
+	video = require('./video.json');
+
+	} catch (err) {
+		success = false
+		log.error(err, '/video/list')
+	}
+
 	res.json({
-		success: true,
+		success,
 		data: video
 	});
 });
-router.options('/upload-video',  function(req, res) {
+router.options('/video/upload',  function(req, res) {
 	crossDomain(req, res);
 	res.json({
 		success: true
 	});
 });
-router.post('/upload-video',  function(req, res) {
+router.post('/video/upload',  function(req, res) {
 	crossDomain(req, res);
 
 
@@ -310,11 +438,17 @@ router.post('/upload-video',  function(req, res) {
 
   form.parse(req, function(err, fields, files) {
     if (err) {
+    	log.error(err, '/upload-video file');
       return res.status(500).send('上传失败');
     }
 
+    let filename = '';
+
+    let success = true;
+		try {
+
     const part = files.video[0].path.split('/');
-    const filename = part[part.length - 1];
+    filename = part[part.length - 1];
 
     delete require.cache[require.resolve('./video.json')];
 		const video = require('./video.json');
@@ -329,10 +463,14 @@ router.post('/upload-video',  function(req, res) {
 
 		fs.writeFileSync('./routes/video.json', JSON.stringify(video, null, 2), 'utf8');
 
+		} catch (err) {
+			success = false
+			log.error(err, '/upload-video')
+		}
 		
 		res.json({
-			success: true,
-			message: '上传成功',
+			success,
+			message: '上传' + (success ? '成功' : '失败'),
 			data: {
 				filename: filename
 			}
@@ -348,6 +486,8 @@ router.options('/video/delete', function(req, res) {
 });
 router.post('/video/delete', function(req, res) {
 	crossDomain(req, res);
+	let success = true;
+	try {
 
 	delete require.cache[require.resolve('./video.json')];
 	const videos = require('./video.json');
@@ -373,9 +513,8 @@ router.post('/video/delete', function(req, res) {
 				const removeDir = ensureRemoveDir(path.join(__dirname, '../upload/video'));
 				const targetPath = path.join(removeDir, videoToDelete.name);
 				fs.renameSync(videoPath, targetPath);
-				console.log(`移动视频文件到remove目录: ${videoToDelete.name}`);
-			} catch (error) {
-				console.error(`移动视频文件失败: ${error.message}`);
+			} catch (err) {
+				log.error(err, '/video/delete renameSync')
 			}
 		}
 	}
@@ -385,14 +524,19 @@ router.post('/video/delete', function(req, res) {
 	const videoRemoveData = ensureRemoveJson(videoRemoveJsonPath);
 	videoRemoveData.unshift(videoToDelete);
 	fs.writeFileSync(videoRemoveJsonPath, JSON.stringify(videoRemoveData, null, 2), 'utf8');
-	console.log(`移动视频记录到video_remove.json: ${videoToDelete.id}`);
 
 	// 从数组中删除视频
 	videos.splice(videoIndex, 1);
 	fs.writeFileSync('./routes/video.json', JSON.stringify(videos, null, 2), 'utf8');
+
+	} catch (err) {
+		success = false
+		log.error(err, '/video/delete')
+	}
+
 	res.json({
-		success: true,
-		message: '删除成功'
+		success,
+		message: '删除' + (success ? '成功' : '失败')
 	});
 });
 // 更新视频
@@ -404,6 +548,8 @@ router.options('/video/update', function(req, res) {
 });
 router.post('/video/update', function(req, res) {
 	crossDomain(req, res);
+	let success = true;
+	try {
 
 	delete require.cache[require.resolve('./video.json')];
 	const videos = require('./video.json');
@@ -430,23 +576,31 @@ router.post('/video/update', function(req, res) {
 	};
 
 	fs.writeFileSync('./routes/video.json', JSON.stringify(videos, null, 2), 'utf8');
+
+	} catch (err) {
+		success = false
+		log.error(err, '/video/update')
+	}
+
 	res.json({
-		success: true,
-		message: '更新成功'
+		success,
+		message:  '更新' + (success ? '成功' : '失败')
 	});
 });
 
 
 
 // 提交记录
-router.options('/add-record', function(req, res) {
+router.options('/record/add', function(req, res) {
 	crossDomain(req, res);
   res.json({
 		success: true
 	});
 });
-router.post('/add-record', function(req, res) {
+router.post('/record/add', function(req, res) {
 	crossDomain(req, res);
+	let success = true;
+	try {
 
 	delete require.cache[require.resolve('./record.json')];
 	const records = require('./record.json');
@@ -456,31 +610,50 @@ router.post('/add-record', function(req, res) {
 	data.createat = moment().format('YYYY-MM-DD HH:mm:ss');
 	records.unshift(data);
 	fs.writeFileSync('./routes/record.json', JSON.stringify(records, null, 2), 'utf8');
+
+	} catch (err) {
+		success = false
+		log.error(err, '/add-record')
+	}
+
 	res.json({
-		success: true,
-		message: '保存成功'
+		success,
+		message:  '保存' + (success ? '成功' : '失败')
 	});
 });
 // 获取记录列表
 router.get('/record/list', function(req, res) {
 	crossDomain(req, res);
+	let success = true;
+	let records = [];
+
+	try {
 
 	delete require.cache[require.resolve('./record.json')];
-	const records = require('./record.json');
+	records = require('./record.json');
+
+	} catch (err) {
+		success = false
+		log.error(err, '/record/list')
+	}
+
 	res.json({
-		success: true,
+		success,
 		data: records
 	});
 });
 // 更新记录
-router.options('/update-record', function(req, res) {
+router.options('/record/update', function(req, res) {
 	crossDomain(req, res);
   res.json({
 		success: true
 	});
 });
-router.post('/update-record', function(req, res) {
+router.post('/record/update', function(req, res) {
 	crossDomain(req, res);
+	let success = true;
+	try {
+
 
 	delete require.cache[require.resolve('./record.json')];
 	const records = require('./record.json');
@@ -523,9 +696,8 @@ router.post('/update-record', function(req, res) {
 						if (fs.existsSync(imagePath)) {
 							try {
 								fs.unlinkSync(imagePath);
-								console.log(`删除图片文件: ${oldImg.url}`);
-							} catch (error) {
-								console.error(`删除图片文件失败: ${error.message}`);
+							} catch (err) {
+								log.error(err, '/update-record unlinkSync')
 							}
 						}
 					}
@@ -539,9 +711,15 @@ router.post('/update-record', function(req, res) {
 	data.createat = oldRecord.createat || data.createat || ''
 	records[recordIndex] = data;
 	fs.writeFileSync('./routes/record.json', JSON.stringify(records, null, 2), 'utf8');
+
+	} catch (err) {
+		success = false
+		log.error(err, '/update-record')
+	}
+
 	res.json({
-		success: true,
-		message: '更新成功'
+		success,
+		message: '更新' + (success ? '成功' : '失败')
 	});
 });
 // 删除记录
@@ -553,6 +731,8 @@ router.options('/record/delete', function(req, res) {
 });
 router.post('/record/delete', function(req, res) {
 	crossDomain(req, res);
+	let success = true;
+	try {
 
 	delete require.cache[require.resolve('./record.json')];
 	const records = require('./record.json');
@@ -581,8 +761,8 @@ router.post('/record/delete', function(req, res) {
 							const removeDir = ensureRemoveDir(path.join(__dirname, '../upload/image'));
 							const targetPath = path.join(removeDir, img.url);
 							fs.renameSync(imagePath, targetPath);
-						} catch (error) {
-							console.error(`删除图片文件失败: ${error.message}`);
+						} catch (err) {
+							log.error(err, '/record/delete renameSync')
 						}
 					}
 				});
@@ -600,9 +780,15 @@ router.post('/record/delete', function(req, res) {
 	// 从数组中删除记录
 	records.splice(recordIndex, 1);
 	fs.writeFileSync('./routes/record.json', JSON.stringify(records, null, 2), 'utf8');
+
+	} catch (err) {
+		success = false
+		log.error(err, '/record/delete')
+	}
+
 	res.json({
-		success: true,
-		message: '删除成功'
+		success,
+		message: '删除' + (success ? '成功' : '失败')
 	});
 });
 
