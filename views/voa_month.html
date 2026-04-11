@@ -19,7 +19,7 @@
   const container = document.querySelector('.list');
   container.innerHTML = `<ul>
     ${list.map((it) => {
-      return `<li><a href="/voa/month/${month}/${encodeURI(it)}" target="_blank">${it}</a></li>`
+      return `<li><a href="/voa/month/${encodeURIComponent(month)}/${encodeURIComponent(it)}" target="_blank">${it}</a></li>`
     }).join('')}
   </ul>`;
 </script>

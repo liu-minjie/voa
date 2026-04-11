@@ -54,13 +54,13 @@
         return `<div class="list-item">
         <span class="video-name">${it}</span>
         <div class="actions">
-            <button class="mdc-button mdc-button--outlined" onclick="openRoiDialog('${it}', this)">
+            <button class="mdc-button mdc-button--outlined" onclick="openRoiDialog(\"${it}\", this)">
                 <span class="mdc-button__label">提取字幕</span>
             </button>
-            <button class="mdc-button mdc-button--raised" onclick="playVideo('${it}')">
+            <button class="mdc-button mdc-button--raised" onclick="playVideo(\"${it}\")">
                 <span class="mdc-button__label">播放</span>
             </button>
-            <button class="mdc-button mdc-button--raised" onclick="renameVideo('${it}', this)">
+            <button class="mdc-button mdc-button--raised" onclick="renameVideo(\"${it}\", this)">
                 <span class="mdc-button__label">重命名</span>
             </button>
         </div>
