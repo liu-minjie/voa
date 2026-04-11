@@ -50,22 +50,39 @@
     const list = {{{list}}};
     const container = document.querySelector('#video-list');
 
-    container.innerHTML = list.map((it) => {
-        return `<div class="list-item">
+    container.innerHTML = list.map((it, index) => {
+        return `<div class="list-item" data-index="${index}">
         <span class="video-name">${it}</span>
         <div class="actions">
-            <button class="mdc-button mdc-button--outlined" onclick="openRoiDialog(\"${it}\", this)">
+            <button class="mdc-button mdc-button--outlined extract-btn">
                 <span class="mdc-button__label">提取字幕</span>
             </button>
-            <button class="mdc-button mdc-button--raised" onclick="playVideo(\"${it}\")">
+            <button class="mdc-button mdc-button--raised play-btn">
                 <span class="mdc-button__label">播放</span>
             </button>
-            <button class="mdc-button mdc-button--raised" onclick="renameVideo(\"${it}\", this)">
+            <button class="mdc-button mdc-button--raised rename-btn">
                 <span class="mdc-button__label">重命名</span>
             </button>
         </div>
     </div>`
     }).join('');
+
+    // 事件委托处理点击事件
+    container.addEventListener('click', (event) => {
+        const listItem = event.target.closest('.list-item');
+        if (!listItem) return;
+        
+        const index = parseInt(listItem.dataset.index);
+        const videoName = list[index];
+        
+        if (event.target.closest('.extract-btn')) {
+            openRoiDialog(videoName, listItem);
+        } else if (event.target.closest('.play-btn')) {
+            playVideo(videoName);
+        } else if (event.target.closest('.rename-btn')) {
+            renameVideo(videoName, listItem);
+        }
+    });
 </script>
 <script src="/public/js/lrc.js"></script>
 </body>
