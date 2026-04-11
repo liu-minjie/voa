@@ -5,43 +5,45 @@ const path = require('path');
 const multiparty = require('multiparty');
 const moment = require('moment');
 const util = require('../util');
+const ffmpeg = require('fluent-ffmpeg');
 
 const log = util.logger.baby;
 
 function ensureJson(filePath, initialData = {}) {
-  if (!fs.existsSync(filePath)) {
-    const dirPath = path.dirname(filePath);
+  const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(__dirname, filePath);
+  if (!fs.existsSync(absolutePath)) {
+    const dirPath = path.dirname(absolutePath);
     if (!fs.existsSync(dirPath)) {
       fs.mkdirSync(dirPath, { recursive: true });
     }
 
-    fs.writeFileSync(filePath, JSON.stringify(initialData, null, 2), 'utf8');
+    fs.writeFileSync(absolutePath, JSON.stringify(initialData, null, 2), 'utf8');
+  } else {
+    delete require.cache[require.resolve(absolutePath)];
   }
+  return require(absolutePath);
 }
-// 确保remove目录存在
-const ensureRemoveDir = (dirPath) => {
-  const removeDir = path.join(dirPath, 'remove');
-  if (!fs.existsSync(removeDir)) {
-    fs.mkdirSync(removeDir, { recursive: true });
-  }
-  return removeDir;
-};
+const writeFileSync = (filePath, data) => {
+  const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(__dirname, filePath);
+  fs.writeFileSync(absolutePath, JSON.stringify(data, null, 2), 'utf8');
+}
 
-// 确保remove JSON文件存在
-const ensureRemoveJson = (jsonPath) => {
-  if (!fs.existsSync(jsonPath)) {
-    fs.writeFileSync(jsonPath, JSON.stringify([], null, 2), 'utf8');
+const ensureDir = (dirPath, folder) => {
+  const dir = folder ? path.join(dirPath, folder) : dirPath;
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
   }
-  return JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-};
+  return dir;
+}
 
-ensureJson('./routes/baseinfo.json', []);
-ensureJson('./routes/image.json', []);
-ensureJson('./routes/image_remove.json', []);
-ensureJson('./routes/video.json', []);
-ensureJson('./routes/video_remove.json', []);
-ensureJson('./routes/record.json', []);
-ensureJson('./routes/record_remove.json', []);
+
+ensureJson('./baseinfo.json', []);
+ensureJson('./image.json', []);
+ensureJson('./image_remove.json', []);
+ensureJson('./video.json', []);
+ensureJson('./video_remove.json', []);
+ensureJson('./record.json', []);
+ensureJson('./record_remove.json', []);
 
 function crossDomain(req, res) {
   res.header('Access-Control-Allow-Origin', '*');
@@ -87,7 +89,7 @@ router.post('/baseinfo', function(req, res) {
 	data.createat = moment().format('YYYY-MM-DD HH:mm:ss');
 	data.avatar = data.avatar || (baseinfo.length ? baseinfo[0].avatar || '' : '')
 	baseinfo.unshift(data);
-	fs.writeFileSync('./routes/baseinfo.json', JSON.stringify(baseinfo, null, 2), 'utf8');
+	writeFileSync('./baseinfo.json', baseinfo);
 
 	} catch (err) {
 		success = false
@@ -125,7 +127,7 @@ router.post('/baseinfo/avatar/upload',  function(req, res) {
 		if (first) {
 			first.avatar = avatarUrl;
 			first.updateat = moment().format('YYYY-MM-DD HH:mm:ss')
-			fs.writeFileSync('./routes/baseinfo.json', JSON.stringify(baseinfo, null, 2), 'utf8');
+			writeFileSync('./baseinfo.json', baseinfo);
 		}
 
 		} catch (err) {
@@ -148,40 +150,29 @@ router.post('/baseinfo/avatar/upload',  function(req, res) {
 router.get('/image/item/:name', function(req, res, next) {
 	const name = req.params.name
   const thumb = req.query.thumb || '';
+  const type = req.query.type || 'image';
   const thumbName = path.parse(name).name + '.webp';
   let filePath = path.join(__dirname, thumb ? `../upload/image/thumb/${thumbName}` : `../upload/image/${name}`);
   
-  // 检查文件是否存在
   if (thumb && !fs.existsSync(filePath)) {
-    // 如果请求缩略图但缩略图不存在，使用原图
-    filePath = path.join(__dirname, `../upload/image/${name}`);
+    if (type === 'image') {
+      filePath = path.join(__dirname, `../upload/image/${name}`);
+    }
   }
   
-  // 再次检查文件是否存在
   if (!fs.existsSync(filePath)) {
-    // 如果文件不存在，返回 404 状态码
-    res.status(404).send('File not found');
-    return;
+    return res.status(404).send('File not found');
   }
   
   res.sendFile(filePath, {
     maxAge: '3650d',
     immutable: true
   }, (err) => {
-		if (err) {
-      if (err.code !== 'ENOENT') {
-        log.error(err, '/image/item/:name');
-      } else if (!res.headersSent) {
-        res.status(404).send('File not found');
-        return;
-      } 
-      
-      // 如果响应还未发送，返回 500 错误
-      if (!res.headersSent) {
-        res.status(500).send('Internal server error');
-      }
-		}
-	});
+    err && log.error(err, 'generate video thumbnail');
+    if (!res.headersSent) {
+      res.status(404).send('File not found');
+    }
+  });
 });
 router.get('/image/list', function(req, res) {
 	crossDomain(req, res);
@@ -231,10 +222,8 @@ router.post('/image/upload',  function(req, res) {
     const type = fields.type ? fields.type[0] : '';
 
     if (files.thumb) {
-      const thumbDir = './upload/image/thumb';
-      if (!fs.existsSync(thumbDir)) {
-        fs.mkdirSync(thumbDir, { recursive: true });
-      }
+      const thumbDir = ensureDir(path.join(__dirname, '../upload/image'), 'thumb');
+      
       const thumbPath = files.thumb[0].path;
       const thumbName = path.parse(filename).name + '.webp';
       const targetThumbPath = path.join(thumbDir, thumbName);
@@ -253,7 +242,7 @@ router.post('/image/upload',  function(req, res) {
         createat: fields.createat ? fields.createat[0] : moment().format('YYYY-MM-DD HH:mm:ss')
       });
 
-      fs.writeFileSync('./routes/image.json', JSON.stringify(image, null, 2), 'utf8');
+      writeFileSync('./image.json', image);
     }
 
     } catch (err) {
@@ -303,7 +292,7 @@ router.post('/image/delete', function(req, res) {
 		const photoPath = path.join(__dirname, `../upload/image/${photoToDelete.name}`);
 		if (fs.existsSync(photoPath)) {
 			try {
-				const removeDir = ensureRemoveDir(path.join(__dirname, '../upload/image'));
+				const removeDir = ensureDir(path.join(__dirname, '../upload/image'), 'remove');
 				const targetPath = path.join(removeDir, photoToDelete.name);
 				fs.renameSync(photoPath, targetPath);
 			} catch (err) {
@@ -314,13 +303,13 @@ router.post('/image/delete', function(req, res) {
 
 	// 移动照片记录到image_remove.json
 	const imageRemoveJsonPath = path.join(__dirname, './image_remove.json');
-	const imageRemoveData = ensureRemoveJson(imageRemoveJsonPath);
+	const imageRemoveData = ensureJson(imageRemoveJsonPath, []);
 	imageRemoveData.unshift(photoToDelete);
-	fs.writeFileSync(imageRemoveJsonPath, JSON.stringify(imageRemoveData, null, 2), 'utf8');
+	writeFileSync('./image_remove.json', imageRemoveData);
 
 	// 从数组中删除照片
 	images.splice(photoIndex, 1);
-	fs.writeFileSync('./routes/image.json', JSON.stringify(images, null, 2), 'utf8');
+	writeFileSync('./image.json', images);
 
 	} catch (err) {
 		success = false
@@ -368,7 +357,7 @@ router.post('/image/update', function(req, res) {
 		updateat: moment().format('YYYY-MM-DD HH:mm:ss')
 	};
 
-	fs.writeFileSync('./routes/image.json', JSON.stringify(images, null, 2), 'utf8');
+	writeFileSync('./image.json', images);
 
 	} catch (err) {
 		success = false
@@ -450,6 +439,33 @@ router.post('/video/upload',  function(req, res) {
     const part = files.video[0].path.split('/');
     filename = part[part.length - 1];
 
+
+    if (files.thumb) {
+      const thumbDir = ensureDir(path.join(__dirname, '../upload/image'), 'thumb');
+      const thumbPath = files.thumb[0].path;
+      const thumbName = path.parse(filename).name + '.webp';
+      const targetThumbPath = path.join(thumbDir, thumbName);
+      fs.renameSync(thumbPath, targetThumbPath);
+    } else {
+      const thumbDir = ensureDir(path.join(__dirname, '../upload/image'), 'thumb');
+      try {
+        ffmpeg(files.video[0].path)
+          .screenshots({
+            count: 1,
+            folder: thumbDir,
+            filename: path.parse(filename).name + '.webp',
+            size: '320x?',
+            timemarks: ['0.5']
+          })
+          .on('end', () => {})
+          .on('error', (err) => {
+            log.error(err, '/upload-video screenshot');
+          });
+      } catch (err) {
+        log.error(err, '/upload-video screenshot 1');
+      }
+    }
+
     delete require.cache[require.resolve('./video.json')];
 		const video = require('./video.json');
 
@@ -461,7 +477,7 @@ router.post('/video/upload',  function(req, res) {
 			createat: fields.createat ? fields.createat[0] : moment().format('YYYY-MM-DD HH:mm:ss')
 		});
 
-		fs.writeFileSync('./routes/video.json', JSON.stringify(video, null, 2), 'utf8');
+		writeFileSync('./video.json', video);
 
 		} catch (err) {
 			success = false
@@ -507,10 +523,11 @@ router.post('/video/delete', function(req, res) {
 	
 	// 移动视频文件到remove目录
 	if (videoToDelete.name) {
+    //删除thumb
 		const videoPath = path.join(__dirname, `../upload/video/${videoToDelete.name}`);
 		if (fs.existsSync(videoPath)) {
 			try {
-				const removeDir = ensureRemoveDir(path.join(__dirname, '../upload/video'));
+				const removeDir = ensureDir(path.join(__dirname, '../upload/video'), 'remove');
 				const targetPath = path.join(removeDir, videoToDelete.name);
 				fs.renameSync(videoPath, targetPath);
 			} catch (err) {
@@ -520,14 +537,13 @@ router.post('/video/delete', function(req, res) {
 	}
 
 	// 移动视频记录到video_remove.json
-	const videoRemoveJsonPath = path.join(__dirname, './video_remove.json');
-	const videoRemoveData = ensureRemoveJson(videoRemoveJsonPath);
+	const videoRemoveData = ensureJson('./video_remove.json', []);
 	videoRemoveData.unshift(videoToDelete);
-	fs.writeFileSync(videoRemoveJsonPath, JSON.stringify(videoRemoveData, null, 2), 'utf8');
+	writeFileSync('./video_remove.json', videoRemoveData);
 
 	// 从数组中删除视频
 	videos.splice(videoIndex, 1);
-	fs.writeFileSync('./routes/video.json', JSON.stringify(videos, null, 2), 'utf8');
+	writeFileSync('./video.json', videos);
 
 	} catch (err) {
 		success = false
@@ -575,7 +591,7 @@ router.post('/video/update', function(req, res) {
 		updateat: moment().format('YYYY-MM-DD HH:mm:ss')
 	};
 
-	fs.writeFileSync('./routes/video.json', JSON.stringify(videos, null, 2), 'utf8');
+	writeFileSync('./video.json', videos);
 
 	} catch (err) {
 		success = false
@@ -609,7 +625,7 @@ router.post('/record/add', function(req, res) {
 	data.id = Date.now();
 	data.createat = moment().format('YYYY-MM-DD HH:mm:ss');
 	records.unshift(data);
-	fs.writeFileSync('./routes/record.json', JSON.stringify(records, null, 2), 'utf8');
+	writeFileSync('./record.json', records);
 
 	} catch (err) {
 		success = false
@@ -710,7 +726,7 @@ router.post('/record/update', function(req, res) {
 	data.updateat = moment().format('YYYY-MM-DD HH:mm:ss');
 	data.createat = oldRecord.createat || data.createat || ''
 	records[recordIndex] = data;
-	fs.writeFileSync('./routes/record.json', JSON.stringify(records, null, 2), 'utf8');
+	writeFileSync('./record.json', records);
 
 	} catch (err) {
 		success = false
@@ -758,7 +774,7 @@ router.post('/record/delete', function(req, res) {
 					const imagePath = path.join(__dirname, `../upload/image/${img.url}`);
 					if (fs.existsSync(imagePath)) {
 						try {
-							const removeDir = ensureRemoveDir(path.join(__dirname, '../upload/image'));
+							const removeDir = ensureDir(path.join(__dirname, '../upload/image'), 'remove');
 							const targetPath = path.join(removeDir, img.url);
 							fs.renameSync(imagePath, targetPath);
 						} catch (err) {
@@ -770,16 +786,15 @@ router.post('/record/delete', function(req, res) {
 		});
 	}
 
-	const recordRemoveJsonPath = path.join(__dirname, './record_remove.json');
-	const recordRemoveData = ensureRemoveJson(recordRemoveJsonPath);
+	const recordRemoveData = ensureJson('./record_remove.json', []);
 	recordRemoveData.unshift(recordToDelete);
-	fs.writeFileSync(recordRemoveJsonPath, JSON.stringify(recordRemoveData, null, 2), 'utf8');
+	writeFileSync('./record_remove.json', recordRemoveData);
 
 
 
 	// 从数组中删除记录
 	records.splice(recordIndex, 1);
-	fs.writeFileSync('./routes/record.json', JSON.stringify(records, null, 2), 'utf8');
+	writeFileSync('./record.json', records);
 
 	} catch (err) {
 		success = false
