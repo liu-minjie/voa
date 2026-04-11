@@ -27,7 +27,7 @@ function openRoiDialog(fileName, dom) {
   }
 
   // 这里的路径应指向你的 Node 服务静态资源目录
-  video.src = `/lrc/videos/${fileName}`; 
+  video.src = `/voa/lrc/videos/${fileName}`; 
   dialog.open();
   
   video.onloadedmetadata = () => {
@@ -43,7 +43,7 @@ function closeRoiDialog() {
 
 // 播放功能
 function playVideo(fileName) {
-  window.open(`/lrc/videos/${fileName}`, '_blank');
+  window.open(`/voa/lrc/videos/${fileName}`, '_blank');
 }
 
 async function  renameVideo(fileName, dom) {
@@ -54,7 +54,7 @@ async function  renameVideo(fileName, dom) {
     newName: name
   };
 
-  const response = await fetch('/lrc/videos/rename', {
+  const response = await fetch('/voa/lrc/videos/rename', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -168,7 +168,7 @@ async function submitExtract(btn) {
     ...roiData
   };
 
-  const response = await fetch('/lrc/extract', {
+  const response = await fetch('/voa/lrc/extract', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)

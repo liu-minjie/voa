@@ -128,11 +128,11 @@ router.get('/lrc', function(req, res, next) {
     list = fs.readdirSync(path.join(dataPath, 'voa/video'));
     list = JSON.stringify(list.filter((it) => {
       return it.match(/mp4$/) && !videoJson[it];
-    }))
+    }));
   } catch(err) {
     log.error(err, '/lrc');
   }
-	res.render('lrc', { list });
+	res.render('voa_lrc', { list });
 });
 
 router.get('/lrc/videos/:name', function(req, res, next) {
