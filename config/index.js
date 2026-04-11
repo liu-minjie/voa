@@ -10,6 +10,8 @@ if (!fs.existsSync(logDir)) {
 }
 
 module.exports = {
+  port: 3330,
+  homePage: '',
   logSettings: {
     appenders: [{
       type: 'console'
@@ -17,7 +19,7 @@ module.exports = {
       type: 'file',
       filename: logDir + '/voa.log',
       category: 'voa'
-    },, {
+    }, {
       type: 'file',
       filename: logDir + '/baby.log',
       category: 'baby'
@@ -25,5 +27,6 @@ module.exports = {
     babyLogLevel: 'WARN',
     voaLogLevel: 'WARN',
     replaceConsole: true
-  }
+  },
+  dataPath: path.resolve(__dirname, '../../data')
 };

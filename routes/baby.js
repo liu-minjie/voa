@@ -6,11 +6,13 @@ const multiparty = require('multiparty');
 const moment = require('moment');
 const util = require('../util');
 const ffmpeg = require('fluent-ffmpeg');
+const config = require('../config');
+const dataPath = config.dataPath;
 
 const log = util.logger.baby;
 
 function ensureJson(filePath, initialData = {}) {
-  const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(__dirname, filePath);
+  const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(dataPath, path.basename(filePath));
   if (!fs.existsSync(absolutePath)) {
     const dirPath = path.dirname(absolutePath);
     if (!fs.existsSync(dirPath)) {
@@ -24,7 +26,7 @@ function ensureJson(filePath, initialData = {}) {
   return require(absolutePath);
 }
 const writeFileSync = (filePath, data) => {
-  const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(__dirname, filePath);
+  const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(dataPath, path.basename(filePath));
   fs.writeFileSync(absolutePath, JSON.stringify(data, null, 2), 'utf8');
 }
 
@@ -58,8 +60,8 @@ router.get('/baseinfo', function(req, res) {
 	let success = true;
 	try {
 
-	delete require.cache[require.resolve('./baseinfo.json')];
-	baseinfo = require('./baseinfo.json');
+	delete require.cache[require.resolve(path.join(dataPath, 'baseinfo.json'))];
+	baseinfo = require(path.join(dataPath, 'baseinfo.json'));
 
 	} catch (err) {
 		success = false
@@ -82,8 +84,8 @@ router.post('/baseinfo', function(req, res) {
 	let success = true;
 	try {
 
-	delete require.cache[require.resolve('./baseinfo.json')];
-	const baseinfo = require('./baseinfo.json');
+	delete require.cache[require.resolve(path.join(dataPath, 'baseinfo.json'))];
+	const baseinfo = require(path.join(dataPath, 'baseinfo.json'));
 	const data = req.body.data;
 
 	data.createat = moment().format('YYYY-MM-DD HH:mm:ss');
@@ -105,7 +107,7 @@ router.post('/baseinfo', function(req, res) {
 router.post('/baseinfo/avatar/upload',  function(req, res) {
 	crossDomain(req, res);
 
-	var form = new multiparty.Form({ uploadDir: './upload/avatar' });
+	var form = new multiparty.Form({ uploadDir: path.join(dataPath, 'upload/avatar') });
 
   form.parse(req, function(err, fields, files) {
     if (err) {
@@ -121,8 +123,8 @@ router.post('/baseinfo/avatar/upload',  function(req, res) {
 
 		const avatarUrl = `/avatar/${filename}`;
 
-		delete require.cache[require.resolve('./baseinfo.json')];
-		let baseinfo = require('./baseinfo.json');
+		delete require.cache[require.resolve(path.join(dataPath, 'baseinfo.json'))];
+		let baseinfo = require(path.join(dataPath, 'baseinfo.json'));
 		const first = baseinfo[0];
 		if (first) {
 			first.avatar = avatarUrl;
@@ -152,11 +154,11 @@ router.get('/image/item/:name', function(req, res, next) {
   const thumb = req.query.thumb || '';
   const type = req.query.type || 'image';
   const thumbName = path.parse(name).name + '.webp';
-  let filePath = path.join(__dirname, thumb ? `../upload/image/thumb/${thumbName}` : `../upload/image/${name}`);
+  let filePath = path.join(dataPath, thumb ? `upload/image/thumb/${thumbName}` : `upload/image/${name}`);
   
   if (thumb && !fs.existsSync(filePath)) {
     if (type === 'image') {
-      filePath = path.join(__dirname, `../upload/image/${name}`);
+      filePath = path.join(dataPath, `upload/image/${name}`);
     }
   }
   
@@ -203,7 +205,7 @@ router.post('/image/upload',  function(req, res) {
 	crossDomain(req, res);
 
 
-	const form = new multiparty.Form({ uploadDir: './upload/image' });
+	const form = new multiparty.Form({ uploadDir: path.join(dataPath, 'upload/image') });
 
   form.parse(req, function(err, fields, files) {
     if (err) {
@@ -222,7 +224,7 @@ router.post('/image/upload',  function(req, res) {
     const type = fields.type ? fields.type[0] : '';
 
     if (files.thumb) {
-      const thumbDir = ensureDir(path.join(__dirname, '../upload/image'), 'thumb');
+      const thumbDir = ensureDir(path.join(dataPath, 'upload/image'), 'thumb');
       
       const thumbPath = files.thumb[0].path;
       const thumbName = path.parse(filename).name + '.webp';
@@ -289,10 +291,10 @@ router.post('/image/delete', function(req, res) {
 	
 	// 移动照片文件到remove目录
 	if (photoToDelete.name) {
-		const photoPath = path.join(__dirname, `../upload/image/${photoToDelete.name}`);
+		const photoPath = path.join(dataPath, `upload/image/${photoToDelete.name}`);
 		if (fs.existsSync(photoPath)) {
 			try {
-				const removeDir = ensureDir(path.join(__dirname, '../upload/image'), 'remove');
+				const removeDir = ensureDir(path.join(dataPath, 'upload/image'), 'remove');
 				const targetPath = path.join(removeDir, photoToDelete.name);
 				fs.renameSync(photoPath, targetPath);
 			} catch (err) {
@@ -302,8 +304,7 @@ router.post('/image/delete', function(req, res) {
 	}
 
 	// 移动照片记录到image_remove.json
-	const imageRemoveJsonPath = path.join(__dirname, './image_remove.json');
-	const imageRemoveData = ensureJson(imageRemoveJsonPath, []);
+	const imageRemoveData = ensureJson('./image_remove.json', []);
 	imageRemoveData.unshift(photoToDelete);
 	writeFileSync('./image_remove.json', imageRemoveData);
 
@@ -376,7 +377,7 @@ router.post('/image/update', function(req, res) {
 
 router.get('/video/item/:name', function(req, res, next) {
 	const name = req.params.name
-	res.sendFile(path.join(__dirname, `../upload/video/${name}`), {
+	res.sendFile(path.join(dataPath, `upload/video/${name}`), {
     maxAge: '3650d',
     immutable: true
   }, (err) => {
@@ -423,7 +424,7 @@ router.post('/video/upload',  function(req, res) {
 	crossDomain(req, res);
 
 
-	const form = new multiparty.Form({ uploadDir: './upload/video' });
+	const form = new multiparty.Form({ uploadDir: path.join(dataPath, 'upload/video') });
 
   form.parse(req, function(err, fields, files) {
     if (err) {
@@ -441,13 +442,13 @@ router.post('/video/upload',  function(req, res) {
 
 
     if (files.thumb) {
-      const thumbDir = ensureDir(path.join(__dirname, '../upload/image'), 'thumb');
+      const thumbDir = ensureDir(path.join(dataPath, 'upload/image'), 'thumb');
       const thumbPath = files.thumb[0].path;
       const thumbName = path.parse(filename).name + '.webp';
       const targetThumbPath = path.join(thumbDir, thumbName);
       fs.renameSync(thumbPath, targetThumbPath);
     } else {
-      const thumbDir = ensureDir(path.join(__dirname, '../upload/image'), 'thumb');
+      const thumbDir = ensureDir(path.join(dataPath, 'upload/image'), 'thumb');
       try {
         ffmpeg(files.video[0].path)
           .screenshots({
@@ -524,10 +525,10 @@ router.post('/video/delete', function(req, res) {
 	// 移动视频文件到remove目录
 	if (videoToDelete.name) {
     //删除thumb
-		const videoPath = path.join(__dirname, `../upload/video/${videoToDelete.name}`);
+		const videoPath = path.join(dataPath, `upload/video/${videoToDelete.name}`);
 		if (fs.existsSync(videoPath)) {
 			try {
-				const removeDir = ensureDir(path.join(__dirname, '../upload/video'), 'remove');
+				const removeDir = ensureDir(path.join(dataPath, 'upload/video'), 'remove');
 				const targetPath = path.join(removeDir, videoToDelete.name);
 				fs.renameSync(videoPath, targetPath);
 			} catch (err) {
@@ -708,7 +709,7 @@ router.post('/record/update', function(req, res) {
 					}
 					// 如果图片不存在于新记录中，删除文件
 					if (!isImageStillExists) {
-						const imagePath = path.join(__dirname, `../upload/image/${oldImg.url}`);
+						const imagePath = path.join(dataPath, `upload/image/${oldImg.url}`);
 						if (fs.existsSync(imagePath)) {
 							try {
 								fs.unlinkSync(imagePath);
@@ -770,11 +771,11 @@ router.post('/record/delete', function(req, res) {
 	if (recordToDelete.items) {
 		recordToDelete.items.forEach(item => {
 			if (item.images) {
-				item.images.forEach(img => {
-					const imagePath = path.join(__dirname, `../upload/image/${img.url}`);
-					if (fs.existsSync(imagePath)) {
-						try {
-							const removeDir = ensureDir(path.join(__dirname, '../upload/image'), 'remove');
+					item.images.forEach(img => {
+						const imagePath = path.join(dataPath, `upload/image/${img.url}`);
+						if (fs.existsSync(imagePath)) {
+							try {
+								const removeDir = ensureDir(path.join(dataPath, 'upload/image'), 'remove');
 							const targetPath = path.join(removeDir, img.url);
 							fs.renameSync(imagePath, targetPath);
 						} catch (err) {

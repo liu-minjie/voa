@@ -1,6 +1,7 @@
 const config = require('./config');
 const path = require('path');
 const fs = require('fs');
+const dataPath = config.dataPath;
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
@@ -28,18 +29,17 @@ app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'html');
 
 
-['./upload/avatar', './upload/image/remove', './upload/video/remove', './upload/image/thumb'].forEach((item) => {
-  const uploadDir = path.join(__dirname, item);
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
+['upload/avatar', 'upload/image/remove', 'upload/video/remove', 'upload/image/thumb'].forEach((item) => {
+  const fullPath = path.join(dataPath, item);
+  if (!fs.existsSync(fullPath)) {
+    fs.mkdirSync(fullPath, { recursive: true });
   }
 });
-
 // uncomment after placing your favicon in /public
 //var favicon = require('serve-favicon');
 //app.use(favicon(__dirname + '/public/favicon.ico'));
 app.use('/public', express.static(path.join(__dirname, 'public')));
-app.use('/baby/avatar', express.static(path.join(__dirname, 'upload/avatar')));
+app.use('/baby/avatar', express.static(path.join(dataPath, 'upload/avatar')));
 
 
 

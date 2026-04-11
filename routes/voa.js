@@ -5,7 +5,8 @@ const request = require('request');
 const fs = require('fs');
 const path = require('path');
 const util = require('../util');
-const videoJson = require('./english.json');
+const dataPath = config.dataPath;
+const videoJson = require(path.join(dataPath, 'voa/english.json'));
 const { exec } = require('child_process');
 
 const log = util.logger.voa;
@@ -14,7 +15,7 @@ const log = util.logger.voa;
 router.get('/', function(req, res, next) {
 	let list = [];
 	try {
-		list = fs.readdirSync('./media');
+		list = fs.readdirSync(path.join(dataPath, 'voa/media'));
 		list = JSON.stringify(list.filter((it) => {
 			return it.match(/^\d+$/);
 		}))
@@ -27,7 +28,8 @@ router.get('/', function(req, res, next) {
 router.get('/month/:month', function(req, res, next) {
   let list = [];
   try {
-    list = fs.readdirSync('./media/' + req.params.month);
+    const month = path.basename(req.params.month);
+    list = fs.readdirSync(path.join(dataPath, 'voa/media', month));
     list = JSON.stringify(list.filter((it) => {
       return it[0] !== '.'
     }))
@@ -45,8 +47,10 @@ router.get('/month/:month/:name', function(req, res, next) {
   let txt = '';
   let data = '';
 	try {
-		lrc = fs.readFileSync(`./media/${req.params.month}/${req.params.name}/${req.params.name}.lrc`, { encoding: 'utf8'});
-		txt = req.params.month === 'o' ? '' : fs.readFileSync(`./media/${req.params.month}/${req.params.name}/${req.params.name}.txt`, { encoding: 'utf8'});
+    const month = path.basename(req.params.month);
+    const name = path.basename(req.params.name);
+		lrc = fs.readFileSync(path.join(dataPath, 'voa/media', month, name, `${name}.lrc`), { encoding: 'utf8'});
+		txt = month === 'o' ? '' : fs.readFileSync(path.join(dataPath, 'voa/media', month, name, `${name}.txt`), { encoding: 'utf8'});
 	  data = JSON.stringify({
       month: req.params.month,
       name: req.params.name,
@@ -68,7 +72,10 @@ router.get('/movie/:movie/:season/:name', function(req, res, next) {
   let lrc = '';
   let data = ''
 	try {
-		lrc = fs.readFileSync(`./media/movie/${req.params.movie}/${req.params.season}/${req.params.name}/${req.params.name}.lrc`, { encoding: 'utf8'});
+    const movie = path.basename(req.params.movie);
+    const season = path.basename(req.params.season);
+    const name = path.basename(req.params.name);
+		lrc = fs.readFileSync(path.join(dataPath, 'voa/media/movie', movie, season, name, `${name}.lrc`), { encoding: 'utf8'});
 	  data =  JSON.stringify({
       month: `${req.params.movie}_${req.params.season}`,
       name:  req.params.name,
@@ -89,14 +96,16 @@ router.get('/movie/:movie/:season/:name', function(req, res, next) {
 
 router.get('/media/:month/:name', function(req, res, next) {
   try {
-    const month = req.params.month + '';
+    const month = path.basename(req.params.month + '');
     const part = month.split('_')
-    const name = req.params.name.trim().replace(/\.mp3$/, '');
-    let file = `../media/${req.params.month}/${name}/${name}.mp3`;
+    const name = path.basename(req.params.name.trim().replace(/\.mp3$/, ''));
+    let file = path.join(dataPath, 'voa/media', month, name, `${name}.mp3`);
     if (part.length == 2) {
-      file = `../media/move/${part[0]}/${part[1]}/${name}/${name}.mp3`;
+      const movie = path.basename(part[0]);
+      const season = path.basename(part[1]);
+      file = path.join(dataPath, 'voa/media/move', movie, season, name, `${name}.mp3`);
     }
-    res.sendFile(path.join(__dirname, file), {
+    res.sendFile(file, {
       maxAge: '365d',
       immutable: true
     }, (err) => {
@@ -116,7 +125,7 @@ router.get('/media/:month/:name', function(req, res, next) {
 router.get('/lrc', function(req, res, next) {
   let list = [];
   try {
-    list = fs.readdirSync('./video');
+    list = fs.readdirSync(path.join(dataPath, 'voa/video'));
     list = JSON.stringify(list.filter((it) => {
       return it.match(/mp4$/) && !videoJson[it];
     }))
@@ -127,7 +136,8 @@ router.get('/lrc', function(req, res, next) {
 });
 
 router.get('/lrc/videos/:name', function(req, res, next) {
-  res.sendFile(path.join(__dirname,`../video/${req.params.name}`), (err) => {
+  const name = path.basename(req.params.name);
+  res.sendFile(path.join(dataPath, 'voa/video', name), (err) => {
   	if (err) {
       log.error(err, '/lrc/videos/:name');
       
@@ -143,46 +153,47 @@ router.get('/lrc/videos/:name', function(req, res, next) {
 
 router.post('/lrc/extract', (req, res) => {
 	const { videoName, y_start, y_end, x_start, x_end } = req.body;
-	const cmd = `docker exec srt_worker_final python3 /app/extract_srt.py "/app/video/${videoName}" ${y_start} ${y_end} ${x_start} ${x_end}`;
+	const safeVideoName = path.basename(videoName);
+	const cmd = `docker exec srt_worker_final python3 /app/extract_srt.py "/app/video/${safeVideoName}" ${y_start} ${y_end} ${x_start} ${x_end}`;
 	
 	exec(cmd, (error, stdout, stderr) => {
 		if (error) {
       log.eror(err, '/lrc/extract docker cmd')
       return res.status(500).json({ error: error.message });
     } 
-		videoJson[videoName] = 1;
+		videoJson[safeVideoName] = 1;
     try {
-      fs.writeFileSync('./routes/english.json', JSON.stringify(videoJson, null, 2), 'utf8');
+      fs.writeFileSync(path.join(dataPath, 'voa/english.json'), JSON.stringify(videoJson, null, 2), 'utf8');
     } catch (err) {
       log.error(err, '/lrc/extract write json');
       return res.status(500).json({ error: err.message });
     }
 		
 
-		const oldMp3 = `./video/mp3/${videoName.replace('mp4', 'mp3')}`
+		const oldMp3 = path.join(dataPath, 'voa/video/mp3', safeVideoName.replace('mp4', 'mp3'))
 		if (fs.existsSync(oldMp3)) {
-			const dir = videoName.replace('.mp4', '');
-			fs.rename(oldMp3, `./media/o/${dir}/${dir}.mp3`, (err) => {
+			const dir = safeVideoName.replace('.mp4', '');
+			fs.rename(oldMp3, path.join(dataPath, 'voa/media/o', dir, `${dir}.mp3`), (err) => {
 				if (err) {
           log.eror(err, '/lrc/extract rename')
 					return res.status(500).json({ error: err.message });
 				}
-				videoJson[videoName] = 2;
-				fs.writeFileSync('./routes/english.json', JSON.stringify(videoJson, null, 2), 'utf8');
+				videoJson[safeVideoName] = 2;
+				fs.writeFileSync(path.join(dataPath, 'voa/english.json'), JSON.stringify(videoJson, null, 2), 'utf8');
 				res.json({ success: true });
 			});
 		} else {
-			const dir = videoName.replace('.mp4', '');
-			const src = path.join(__dirname, `../video/${videoName}`);
-			const dst = path.join(__dirname, `../media/movie/o/s1/${dir}/${dir}.mp3`);
+			const dir = safeVideoName.replace('.mp4', '');
+			const src = path.join(dataPath, 'voa/video', safeVideoName);
+			const dst = path.join(dataPath, 'voa/media/movie/o/s1', dir, `${dir}.mp3`);
 			const cmd = `ffmpeg -i "${src}" -q:a 0 -map a "${dst}"`
 			exec(cmd, (error, stdout, stderr) => {
 				if (error) {
           log.eror(err, '/lrc/extract ffmpeg cmd')
           return res.status(500).json({ error: error.message });
         } 
-				videoJson[videoName] = 2;
-				fs.writeFileSync('./routes/english.json', JSON.stringify(videoJson, null, 2), 'utf8');
+				videoJson[safeVideoName] = 2;
+				fs.writeFileSync(path.join(dataPath, 'voa/english.json'), JSON.stringify(videoJson, null, 2), 'utf8');
 				res.json({ success: true });
 			})
 		}
@@ -191,9 +202,11 @@ router.post('/lrc/extract', (req, res) => {
 
 router.post('/lrc/videos/rename', (req, res) => {
 	const { videoName, newName } = req.body;
+	const safeVideoName = path.basename(videoName);
+	const safeNewName = path.basename(newName);
 	let msg = '';
 	try {
-		fs.renameSync(`./video/${videoName}`, `./video/${newName}.mp4`);
+		fs.renameSync(path.join(dataPath, 'voa/video', safeVideoName), path.join(dataPath, 'voa/video', `${safeNewName}.mp4`));
 	} catch(err) {
 		log.error(err, '/lrc/videos/rename');
 		msg = err.message;

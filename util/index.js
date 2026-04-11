@@ -1,7 +1,8 @@
 const log4js = require('log4js');
+const path = require('path');
 const config = require('../config');
 const ChatBot = require('dingtalk-robot-sender');
-const robot = new ChatBot(require('./dingding.json'));
+const robot = new ChatBot(require(path.join(config.dataPath, 'voa/dingding.json')));
 
 
 
@@ -12,21 +13,10 @@ util.logger = {
 	baby: {
 		error: (err, loc) => {
 			const msg = `loc: ${loc || ''}, code: ${err.code}, msg: ${err.message}`;
-			log4js.getLogger('baby').error(msg);
-			const textContent = {
-				"msgtype": "text",
-				"text": {
-					"content": `监控: ${msg}`
-				}
-			}
-			robot.send(textContent)
-			.then((res) => {})
-			.catch((err) => {
-			});
+			log4js.getLogger('baby').error(msg);	
 		}
 	}
 }
-
 
 const oldVoaError = log4js.getLogger('voa').error.bind(log4js.getLogger('voa'));
 util.logger.voa.error = (err, loc) => {
@@ -41,7 +31,18 @@ util.logger.baby.error = (err, loc) => {
 	if (err.code === 'ECONNRESET' || err.code === 'EPIPE' || err.code === 'ECONNABORT' || err.syscall === 'write') {
      return;
   }
-	oldBabyError(`loc: ${loc || ''}, code: ${err.code}, msg: ${err.message}`)
+  const msg = `loc: ${loc || ''}, code: ${err.code}, msg: ${err.message}`;
+	oldBabyError(msg);
+	const textContent = {
+		"msgtype": "text",
+		"text": {
+			"content": `监控: ${msg}`
+		}
+	}
+	robot.send(textContent)
+	.then(() => {})
+	.catch((err) => {
+	});
 }
 
 log4js.getLogger('voa').setLevel(config.logSettings.voaLogLevel);

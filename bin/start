@@ -8,11 +8,6 @@ const cluster = recluster(path.join(__dirname, './www'));
 cluster.run();
 
 process.on('SIGUSR2', function() {
-	const util = require('../util');
-	try {
-		util.dingding('reload');
-	} catch (e) {
-	}
 	cluster.reload();
 });
 

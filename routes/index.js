@@ -5,7 +5,6 @@ const request = require('request');
 const fs = require('fs');
 const path = require('path');
 const util = require('../util');
-const videoJson = require('./english.json');
 const { exec } = require('child_process');
 
 router.get('/', function(req, res, next) {
