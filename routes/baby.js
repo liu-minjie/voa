@@ -182,8 +182,8 @@ router.get('/image/list', function(req, res) {
 	let success = true;
 	try {
 
-	delete require.cache[require.resolve('./image.json')];
-	image = require('./image.json');
+	delete require.cache[require.resolve(path.join(dataPath, 'image.json'))];
+	image = require(path.join(dataPath, 'image.json'));
 
 	} catch (err) {
 		success = false
@@ -234,8 +234,8 @@ router.post('/image/upload',  function(req, res) {
 
     // 只有相册图片才保存到image.json
     if (type === 'gallery') {
-      delete require.cache[require.resolve('./image.json')];
-      const image = require('./image.json');
+      delete require.cache[require.resolve(path.join(dataPath, 'image.json'))];
+      const image = require(path.join(dataPath, 'image.json'));
       image.unshift({
         id: Date.now(),
         originalName: files.image[0].originalFilename || filename,
@@ -273,8 +273,8 @@ router.post('/image/delete', function(req, res) {
 	let success = true;
 	try {
 
-	delete require.cache[require.resolve('./image.json')];
-	const images = require('./image.json');
+	delete require.cache[require.resolve(path.join(dataPath, 'image.json'))];
+	const images = require(path.join(dataPath, 'image.json'));
 	const photoId = req.body.id;
 
 	// 找到要删除的照片
@@ -333,9 +333,9 @@ router.post('/image/update', function(req, res) {
 	crossDomain(req, res);
 	let success = true;
 	try {
-
-	delete require.cache[require.resolve('./image.json')];
-	const images = require('./image.json');
+		
+	delete require.cache[require.resolve(path.join(dataPath, 'image.json'))];
+	const images = require(path.join(dataPath, 'image.json'));
 	const data = req.body;
 	const imageId = data.id;
 
@@ -401,8 +401,8 @@ router.get('/video/list', function(req, res) {
 	let success = true;
 	try {
 
-	delete require.cache[require.resolve('./video.json')];
-	video = require('./video.json');
+	delete require.cache[require.resolve(path.join(dataPath, 'video.json'))];
+	video = require(path.join(dataPath, 'video.json'));
 
 	} catch (err) {
 		success = false
@@ -467,8 +467,8 @@ router.post('/video/upload',  function(req, res) {
       }
     }
 
-    delete require.cache[require.resolve('./video.json')];
-		const video = require('./video.json');
+    delete require.cache[require.resolve(path.join(dataPath, 'video.json'))];
+		const video = require(path.join(dataPath, 'video.json'));
 
 		video.unshift({
 			id: Date.now(),
@@ -506,8 +506,8 @@ router.post('/video/delete', function(req, res) {
 	let success = true;
 	try {
 
-	delete require.cache[require.resolve('./video.json')];
-	const videos = require('./video.json');
+	delete require.cache[require.resolve(path.join(dataPath, 'video.json'))];
+	const videos = require(path.join(dataPath, 'video.json'));
 	const videoId = req.body.id;
 
 	// 找到要删除的视频
@@ -568,8 +568,8 @@ router.post('/video/update', function(req, res) {
 	let success = true;
 	try {
 
-	delete require.cache[require.resolve('./video.json')];
-	const videos = require('./video.json');
+	delete require.cache[require.resolve(path.join(dataPath, 'video.json'))];
+	const videos = require(path.join(dataPath, 'video.json'));
 	const data = req.body;
 	const videoId = data.id;
 
@@ -619,8 +619,8 @@ router.post('/record/add', function(req, res) {
 	let success = true;
 	try {
 
-	delete require.cache[require.resolve('./record.json')];
-	const records = require('./record.json');
+	delete require.cache[require.resolve(path.join(dataPath, 'record.json'))];
+	const records = require(path.join(dataPath, 'record.json'));
 	const data = req.body;
 
 	data.id = Date.now();
@@ -646,8 +646,8 @@ router.get('/record/list', function(req, res) {
 
 	try {
 
-	delete require.cache[require.resolve('./record.json')];
-	records = require('./record.json');
+	delete require.cache[require.resolve(path.join(dataPath, 'record.json'))];
+	records = require(path.join(dataPath, 'record.json'));
 
 	} catch (err) {
 		success = false
@@ -672,8 +672,8 @@ router.post('/record/update', function(req, res) {
 	try {
 
 
-	delete require.cache[require.resolve('./record.json')];
-	const records = require('./record.json');
+	delete require.cache[require.resolve(path.join(dataPath, 'record.json'))];
+	const records = require(path.join(dataPath, 'record.json'));
 	const data = req.body;
 	const recordId = data.id;
 
@@ -751,8 +751,8 @@ router.post('/record/delete', function(req, res) {
 	let success = true;
 	try {
 
-	delete require.cache[require.resolve('./record.json')];
-	const records = require('./record.json');
+	delete require.cache[require.resolve(path.join(dataPath, 'record.json'))];
+	const records = require(path.join(dataPath, 'record.json'));
 	const recordId = req.body.id;
 
 	// 找到要删除的记录
