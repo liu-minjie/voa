@@ -850,7 +850,7 @@ router.get('/checkUpdate', function(req, res) {
 		versionCode: 1,
 		versionName: '1.0.0',
 		updateLog: '1. 初始版本\n2. 基础功能完善',
-		downloadUrl: '/public/growth.apk',
+		downloadUrl: '/public/baby/growth.apk',
 		forceUpdate: false
 	};
 	try {
