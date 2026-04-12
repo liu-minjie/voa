@@ -9,3 +9,7 @@ docker run -d   --name srt_worker_final   -v /home/devops/english/voa:/app   my_
 4. 闹钟提醒
 5. 视频的 thumb
 6. 自动更新
+7. 列表排序
+8. 开一个dingding接口给前端调
+9. 左滑右滑操作
+10. 日期bug 原图加载bug

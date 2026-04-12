@@ -16,7 +16,6 @@ const Handlebars = require('handlebars');
 app.engine('html', function (filePath, options, callback) {
   fs.readFile(filePath, (err, content) => {
     if (err) {
-      util.dingding('template.read', { err, filePath });
       return callback(new Error(err));
     }
     const tpl = Handlebars.compile(content + '');
@@ -69,7 +68,6 @@ app.use(function(err, req, res, next) {
   if (err.status === 404) {
       return ;
   }
-  util.dingding('app', { err, params: req.params, query: req.query, body: req.body });
 });
 
 

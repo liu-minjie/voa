@@ -52,8 +52,16 @@ log4js.getLogger('baby').setLevel(config.logSettings.babyLogLevel);
 
 
 
-util.dingding = function (key, err) {
-	util.logger.voa.error(err);
+util.dingding = function (data) {
+	const textContent = {
+		"msgtype": "text",
+		"text": {
+			"content": `监控数据: ${JSON.stringify(data)}`
+		}
+	}
+	robot.send(textContent)
+	.then(() => {})
+	.catch((err) => {});
 };
 
 

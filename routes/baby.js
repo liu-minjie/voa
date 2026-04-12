@@ -816,6 +816,58 @@ router.post('/record/delete', function(req, res) {
 
 
 
+router.options('/log', function(req, res) {
+	crossDomain(req, res);
+  res.json({
+		success: true
+	});
+});
+router.post('/log', function(req, res) {
+	crossDomain(req, res);
+	let success = true;
+	try {
+		util.dingding(req.body);
+	} catch (err) {
+		success = false
+		log.error(err, '/log')
+	}
+	res.json({
+		success,
+		message: '发送' + (success ? '成功' : '失败')
+	});
+});
+// 检查更新接口
+router.options('/checkUpdate', function(req, res) {
+  crossDomain(req, res);
+  res.json({
+		success: true
+	});
+});
+router.get('/checkUpdate', function(req, res) {
+	crossDomain(req, res);
+	let success = true;
+	let updateData = {
+		versionCode: 1,
+		versionName: '1.0.0',
+		updateLog: '1. 初始版本\n2. 基础功能完善',
+		downloadUrl: '/public/growth.apk',
+		forceUpdate: false
+	};
+	try {
+		const updateJsonPath = path.join(dataPath, 'update.json');
+		if (fs.existsSync(updateJsonPath)) {
+			delete require.cache[require.resolve(updateJsonPath)];
+			updateData = require(updateJsonPath);
+		}
+	} catch (err) {
+		success = false;
+		log.error(err, '/checkUpdate');
+	}
+	res.json({
+		success,
+		data: updateData
+	});
+});
 
 
 
