@@ -8,6 +8,8 @@ const util = require('../util');
 const ffmpeg = require('fluent-ffmpeg');
 const config = require('../config');
 const dataPath = config.dataPath;
+const { Writable } = require('stream');
+const Busboy = require('busboy');
 
 const log = util.logger.baby;
 
@@ -420,80 +422,175 @@ router.options('/video/upload',  function(req, res) {
 		success: true
 	});
 });
-router.post('/video/upload',  function(req, res) {
+router.post('/video/upload', function(req, res) {
 	crossDomain(req, res);
 
-
-	const form = new multiparty.Form({ uploadDir: path.join(dataPath, 'upload/video') });
-
-  form.parse(req, function(err, fields, files) {
-    if (err) {
-    	log.error(err, '/upload-video file');
-      return res.status(500).send('上传失败');
-    }
-
-    let filename = '';
-
-    let success = true;
-		try {
-
-    const part = files.video[0].path.split('/');
-    filename = part[part.length - 1];
-
-
-    if (files.thumb) {
-      const thumbDir = ensureDir(path.join(dataPath, 'upload/image'), 'thumb');
-      const thumbPath = files.thumb[0].path;
-      const thumbName = path.parse(filename).name + '.webp';
-      const targetThumbPath = path.join(thumbDir, thumbName);
-      fs.renameSync(thumbPath, targetThumbPath);
-    } else {
-      const thumbDir = ensureDir(path.join(dataPath, 'upload/image'), 'thumb');
-      try {
-        ffmpeg(files.video[0].path)
-          .screenshots({
-            count: 1,
-            folder: thumbDir,
-            filename: path.parse(filename).name + '.webp',
-            size: '320x?',
-            timemarks: ['0.5']
-          })
-          .on('end', () => {})
-          .on('error', (err) => {
-            log.error(err, '/upload-video screenshot');
-          });
-      } catch (err) {
-        log.error(err, '/upload-video screenshot 1');
-      }
-    }
-
-    delete require.cache[require.resolve(path.join(dataPath, 'video.json'))];
-		const video = require(path.join(dataPath, 'video.json'));
-
-		video.unshift({
-			id: Date.now(),
-			originalName: files.video[0].originalFilename || filename,
-      name: filename,
-			tag:  fields.tag[0] || '',
-			createat: fields.createat ? fields.createat[0] : moment().format('YYYY-MM-DD HH:mm:ss')
-		});
-
-		writeFileSync('./video.json', video);
-
-		} catch (err) {
-			success = false
-			log.error(err, '/upload-video')
+	const busboy = Busboy({
+		headers: req.headers,
+		limits: {
+			fileSize: 500 * 1024 * 1024
 		}
+	});
+
+	const fields = {};
+	let fileWriteStream = null;
+	let filename = '';
+	let tempFilePath = '';
+	let thumbFilePath = '';
+	let metadataStr = '';
+	let fieldCount = 0;
+
+	// 处理普通字段
+	busboy.on('field', (fieldname, value) => {
+		fieldCount++;
+		fields[fieldname] = value;
+		if (fieldname === 'metadata') {
+			metadataStr = value;
+		}
+	});
+
+	// 处理文件字段
+	busboy.on('file', (fieldname, stream, info) => {
 		
-		res.json({
-			success,
-			message: '上传' + (success ? '成功' : '失败'),
-			data: {
-				filename: filename
+		if (fieldname === 'video' || fieldname === 'file') {
+			filename = info.filename || `video_${Date.now()}.mp4`;
+			
+			// 确保上传目录存在
+			const uploadDir = path.join(dataPath, 'upload/video');
+			if (!fs.existsSync(uploadDir)) {
+				fs.mkdirSync(uploadDir, { recursive: true });
 			}
-		});
-  });
+
+			tempFilePath = path.join(uploadDir, filename);
+			
+			// 直接写入目标文件（流式）
+			fileWriteStream = fs.createWriteStream(tempFilePath);
+			
+			stream.on('limit', () => {
+				log.error(new Error('File size exceeds limit'), '/upload-video file limit');
+				fileWriteStream.destroy();
+				res.status(500).send('文件过大');
+			});
+
+			stream.pipe(fileWriteStream);
+		} else if (fieldname === 'thumb') {
+			// 处理缩略图文件
+			const thumbName = info.filename || `thumb_${Date.now()}.webp`;
+			
+			// 确保缩略图目录存在
+			const thumbDir = ensureDir(path.join(dataPath, 'upload/image'), 'thumb');
+			
+			thumbFilePath = path.join(thumbDir, thumbName);
+			
+			// 直接写入目标文件（流式）
+			const thumbWriteStream = fs.createWriteStream(thumbFilePath);
+			
+			stream.on('limit', () => {
+				log.error(new Error('Thumbnail size exceeds limit'), '/upload-video thumb limit');
+				thumbWriteStream.destroy();
+				res.status(500).send('缩略图过大');
+			});
+
+			stream.pipe(thumbWriteStream);
+		}
+	});
+
+	// 所有文件和字段处理完成
+	busboy.on('finish', () => {
+		processUploadComplete();
+	});
+
+	// 所有字段处理完成
+	busboy.on('fieldsLimit', () => {
+		log.error(new Error('Fields limit exceeded'), '/upload-video fields limit');
+	});
+
+	// 处理上传完成
+	function processUploadComplete() {
+		if (!tempFilePath || !fs.existsSync(tempFilePath)) {
+			log.error(new Error('File not created'), '/upload-video file not created');
+			return res.status(500).json({ success: false, message: '上传失败：文件未创建' });
+		}
+		try {
+			// 处理元数据
+			let tag = '';
+			let createat = moment().format('YYYY-MM-DD HH:mm:ss');
+
+			if (metadataStr) {
+				try {
+					const metadata = JSON.parse(metadataStr);
+					tag = metadata.tag || '';
+					createat = metadata.createat || createat;
+				} catch (err) {
+					log.error(err, '/upload-video metadata parse');
+				}
+			} else if (fields.tag) {
+				// 兼容旧格式
+				tag = fields.tag || '';
+				createat = fields.createat || createat;
+			}
+
+			// 生成缩略图（异步，不阻塞响应）
+			if (!thumbFilePath) {
+				const thumbDir = ensureDir(path.join(dataPath, 'upload/image'), 'thumb');
+				const thumbName = path.parse(filename).name + '.webp';
+				const thumbPath = path.join(thumbDir, thumbName);
+
+				ffmpeg(tempFilePath)
+					.screenshots({
+						count: 1,
+						folder: thumbDir,
+						filename: thumbName,
+						size: '320x?',
+						timemarks: ['0.5']
+					})
+					.on('end', () => {})
+					.on('error', (err) => {
+						log.error(err, '/upload-video screenshot');
+					});
+			}
+
+			// 保存视频信息到 video.json
+			delete require.cache[require.resolve(path.join(dataPath, 'video.json'))];
+			const video = require(path.join(dataPath, 'video.json'));
+
+			video.unshift({
+				id: Date.now(),
+				originalName: filename,
+				name: filename,
+				tag: tag,
+				createat: createat
+			});
+
+			writeFileSync('./video.json', video);
+
+
+			res.json({
+				success: true,
+				message: '上传成功',
+				data: {
+					filename: filename
+				}
+			});
+		} catch (err) {
+			log.error(err, '/upload-video process');
+			res.status(500).json({ success: false, message: '上传失败：' + err.message });
+		}
+	}
+
+	busboy.on('error', (err) => {
+		log.error(err, '/upload-video busboy error');
+		if (fileWriteStream) {
+			fileWriteStream.destroy();
+		}
+		if (!res.headersSent) {
+			res.status(500).json({ success: false, message: '上传失败：' + err.message });
+		}
+	});
+
+	req.pipe(busboy);
 });
+
 // 删除视频
 router.options('/video/delete', function(req, res) {
 	crossDomain(req, res);
