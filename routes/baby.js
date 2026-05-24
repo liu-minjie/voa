@@ -48,6 +48,8 @@ ensureJson('./video.json', []);
 ensureJson('./video_remove.json', []);
 ensureJson('./record.json', []);
 ensureJson('./record_remove.json', []);
+ensureJson('./daily_log.json', []);
+ensureJson('./daily_log_remove.json', []);
 
 function crossDomain(req, res) {
   res.header('Access-Control-Allow-Origin', '*');
@@ -474,6 +476,7 @@ router.post('/video/upload', function(req, res) {
 
 			stream.pipe(fileWriteStream);
 		} else if (fieldname === 'thumb') {
+			console.log(111, info);
 			// 处理缩略图文件
 			const thumbName = info.filename || `thumb_${Date.now()}.webp`;
 			
@@ -970,6 +973,202 @@ router.get('/checkUpdate', function(req, res) {
 
 
 
+
+
+
+// ==================== 日常记录 API ====================
+
+// 添加记录
+router.options('/dailylog/add', function(req, res) {
+  crossDomain(req, res);
+  res.json({ success: true });
+});
+router.post('/dailylog/add', function(req, res) {
+  crossDomain(req, res);
+  let success = true;
+  try {
+    delete require.cache[require.resolve(path.join(dataPath, 'daily_log.json'))];
+    const logs = require(path.join(dataPath, 'daily_log.json'));
+    const data = req.body;
+    
+    data.id = Date.now();
+    data.createat = data.createat || moment().format('YYYY-MM-DD HH:mm:ss');
+    logs.unshift(data);
+    writeFileSync('./daily_log.json', logs);
+  } catch (err) {
+    success = false;
+    log.error(err, '/dailylog/add');
+  }
+  res.json({ success, message: '保存' + (success ? '成功' : '失败') });
+});
+
+// 获取记录列表
+router.get('/dailylog/list', function(req, res) {
+  crossDomain(req, res);
+  let success = true;
+  let logs = [];
+  try {
+    delete require.cache[require.resolve(path.join(dataPath, 'daily_log.json'))];
+    logs = require(path.join(dataPath, 'daily_log.json'));
+  } catch (err) {
+    success = false;
+    log.error(err, '/dailylog/list');
+  }
+  res.json({ success, data: logs });
+});
+
+// 更新记录
+router.options('/dailylog/update', function(req, res) {
+  crossDomain(req, res);
+  res.json({ success: true });
+});
+router.post('/dailylog/update', function(req, res) {
+  crossDomain(req, res);
+  let success = true;
+  try {
+    delete require.cache[require.resolve(path.join(dataPath, 'daily_log.json'))];
+    const logs = require(path.join(dataPath, 'daily_log.json'));
+    const data = req.body;
+    const logId = data.id;
+    
+    const logIndex = logs.findIndex(log => log.id == logId);
+    if (logIndex === -1) {
+      return res.json({ success: false, message: '记录不存在' });
+    }
+    
+    const oldLog = logs[logIndex];
+    
+    // 对比并删除被移除的图片
+    if (oldLog.images) {
+      oldLog.images.forEach(oldImg => {
+        let isImageStillExists = false;
+        if (data.images) {
+          data.images.forEach(newImg => {
+            if (newImg.url === oldImg.url) {
+              isImageStillExists = true;
+            }
+          });
+        }
+        if (!isImageStillExists) {
+          const imagePath = path.join(dataPath, `upload/image/${oldImg.url}`);
+          if (fs.existsSync(imagePath)) {
+            try {
+              const removeDir = ensureDir(path.join(dataPath, 'upload/image'), 'remove');
+              const targetPath = path.join(removeDir, oldImg.url);
+              fs.renameSync(imagePath, targetPath);
+            } catch (err) {
+              log.error(err, '/dailylog/update renameSync');
+            }
+          }
+        }
+      });
+    }
+    
+    data.updateat = moment().format('YYYY-MM-DD HH:mm:ss');
+    data.createat = logs[logIndex].createat || data.createat;
+    logs[logIndex] = data;
+    writeFileSync('./daily_log.json', logs);
+  } catch (err) {
+    success = false;
+    log.error(err, '/dailylog/update');
+  }
+  res.json({ success, message: '更新' + (success ? '成功' : '失败') });
+});
+
+// 删除记录
+router.options('/dailylog/delete', function(req, res) {
+  crossDomain(req, res);
+  res.json({ success: true });
+});
+router.post('/dailylog/delete', function(req, res) {
+  crossDomain(req, res);
+  let success = true;
+  try {
+    delete require.cache[require.resolve(path.join(dataPath, 'daily_log.json'))];
+    const logs = require(path.join(dataPath, 'daily_log.json'));
+    const logId = req.body.id;
+    
+    const logIndex = logs.findIndex(log => log.id == logId);
+    if (logIndex === -1) {
+      return res.json({ success: false, message: '记录不存在' });
+    }
+    
+    const logToDelete = logs[logIndex];
+    
+    // 删除关联的图片文件
+    if (logToDelete.images) {
+      logToDelete.images.forEach(img => {
+        const imagePath = path.join(dataPath, `upload/image/${img.url}`);
+        if (fs.existsSync(imagePath)) {
+          try {
+            const removeDir = ensureDir(path.join(dataPath, 'upload/image'), 'remove');
+            const targetPath = path.join(removeDir, img.url);
+            fs.renameSync(imagePath, targetPath);
+          } catch (err) {
+            log.error(err, '/dailylog/delete renameSync');
+          }
+        }
+      });
+    }
+    
+    const logRemoveData = ensureJson('./daily_log_remove.json', []);
+    logRemoveData.unshift(logToDelete);
+    writeFileSync('./daily_log_remove.json', logRemoveData);
+    
+    logs.splice(logIndex, 1);
+    writeFileSync('./daily_log.json', logs);
+  } catch (err) {
+    success = false;
+    log.error(err, '/dailylog/delete');
+  }
+  res.json({ success, message: '删除' + (success ? '成功' : '失败') });
+});
+
+// 获取统计数据
+router.get('/dailylog/stats', function(req, res) {
+  crossDomain(req, res);
+  let success = true;
+  let stats = {};
+  try {
+    delete require.cache[require.resolve(path.join(dataPath, 'daily_log.json'))];
+    const logs = require(path.join(dataPath, 'daily_log.json'));
+    
+    const days = parseInt(req.query.days) || 7;
+    const endDate = moment();
+    const startDate = moment().subtract(days - 1, 'days');
+    
+    const dailyData = {};
+    for (let i = 0; i < days; i++) {
+      const dateStr = moment(startDate).add(i, 'days').format('YYYY-MM-DD');
+      dailyData[dateStr] = { milk: 0, poop: 0, pee: 0 };
+    }
+    
+    logs.forEach(log => {
+      const logDate = moment(log.createat).format('YYYY-MM-DD');
+      if (dailyData[logDate]) {
+        if (log.type === 'milk') {
+          dailyData[logDate].milk += parseInt(log.amount) || 0;
+        } else if (log.type === 'poop') {
+          dailyData[logDate].poop++;
+        } else if (log.type === 'pee') {
+          dailyData[logDate].pee++;
+        }
+      }
+    });
+    
+    const labels = Object.keys(dailyData).sort();
+    stats = {
+      labels,
+      milk: labels.map(d => dailyData[d].milk),
+      poop: labels.map(d => dailyData[d].poop),
+      pee: labels.map(d => dailyData[d].pee)
+    };
+  } catch (err) {
+    success = false;
+    log.error(err, '/dailylog/stats');
+  }
+  res.json({ success, data: stats });
+});
 
 
 
