@@ -948,7 +948,7 @@ router.get('/checkUpdate', function(req, res) {
 	let success = true;
 	let updateData = {
 		versionCode: 1,
-		versionName: '1.0.0',
+		versionName: '1.0.1',
 		updateLog: '1. 初始版本\n2. 基础功能完善',
 		downloadUrl: '/public/baby/growth.apk',
 		forceUpdate: false
