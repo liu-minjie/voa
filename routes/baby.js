@@ -1065,7 +1065,7 @@ router.post('/dailylog/update', function(req, res) {
     }
     
     data.updateat = moment().format('YYYY-MM-DD HH:mm:ss');
-    data.createat = logs[logIndex].createat || data.createat;
+    data.createat = data.createat || logs[logIndex].createat;
     logs[logIndex] = data;
     writeFileSync('./daily_log.json', logs);
   } catch (err) {
