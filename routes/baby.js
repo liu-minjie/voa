@@ -1132,17 +1132,25 @@ router.get('/dailylog/stats', function(req, res) {
   try {
     delete require.cache[require.resolve(path.join(dataPath, 'daily_log.json'))];
     const logs = require(path.join(dataPath, 'daily_log.json'));
-    
-    const days = parseInt(req.query.days) || 7;
-    const endDate = moment();
-    const startDate = moment().subtract(days - 1, 'days');
-    
+
+    let startDate, endDate, days;
+
+    if (req.query.startDate && req.query.endDate) {
+      startDate = moment(req.query.startDate);
+      endDate = moment(req.query.endDate);
+      days = endDate.diff(startDate, 'days') + 1;
+    } else {
+      days = parseInt(req.query.days) || 7;
+      endDate = moment();
+      startDate = moment().subtract(days - 1, 'days');
+    }
+
     const dailyData = {};
     for (let i = 0; i < days; i++) {
       const dateStr = moment(startDate).add(i, 'days').format('YYYY-MM-DD');
       dailyData[dateStr] = { milk: 0, poop: 0, pee: 0 };
     }
-    
+
     logs.forEach(log => {
       const logDate = moment(log.createat).format('YYYY-MM-DD');
       if (dailyData[logDate]) {
@@ -1155,7 +1163,7 @@ router.get('/dailylog/stats', function(req, res) {
         }
       }
     });
-    
+
     const labels = Object.keys(dailyData).sort();
     stats = {
       labels,
