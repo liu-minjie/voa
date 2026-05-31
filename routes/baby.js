@@ -1010,11 +1010,79 @@ router.get('/dailylog/list', function(req, res) {
   try {
     delete require.cache[require.resolve(path.join(dataPath, 'daily_log.json'))];
     logs = require(path.join(dataPath, 'daily_log.json'));
+    
+    // 按时间倒序排列
+    logs.sort((a, b) => new Date(b.createat) - new Date(a.createat));
+    
+    // 日期筛选
+    if (req.query.startDate && req.query.endDate) {
+      const startDate = req.query.startDate;
+      const endDate = req.query.endDate;
+      logs = logs.filter(log => {
+        const logDate = moment(log.createat).format('YYYY-MM-DD');
+        return logDate >= startDate && logDate <= endDate;
+      });
+    }
+    
+    const page = parseInt(req.query.page);
+    const pageSize = parseInt(req.query.pageSize);
+    
+    if (page && pageSize) {
+      // 分页模式
+      const start = (page - 1) * pageSize;
+      const end = start + pageSize;
+      
+      const pagedLogs = logs.slice(start, end);
+      const hasMore = end < logs.length;
+      
+      res.json({ 
+        success, 
+        data: pagedLogs, 
+        hasMore,
+        total: logs.length,
+        page,
+        pageSize
+      });
+    } else {
+      // 全量模式
+      res.json({ 
+        success, 
+        data: logs, 
+        hasMore: false,
+        total: logs.length
+      });
+    }
   } catch (err) {
     success = false;
     log.error(err, '/dailylog/list');
+      res.json({ success, data: [] });
   }
-  res.json({ success, data: logs });
+});
+
+// 获取睡觉状态
+router.get('/dailylog/sleep/status', function(req, res) {
+  crossDomain(req, res);
+  let success = true;
+  let sleeping = false;
+  let lastSleep = null;
+  try {
+    delete require.cache[require.resolve(path.join(dataPath, 'daily_log.json'))];
+    const logs = require(path.join(dataPath, 'daily_log.json'));
+    
+    // 找到最新的睡觉记录
+    const sleepLogs = logs.filter(log => log.type === 'sleep');
+    if (sleepLogs.length > 0) {
+      sleepLogs.sort((a, b) => new Date(b.createat) - new Date(a.createat));
+      const latestSleep = sleepLogs[0];
+      lastSleep = latestSleep;
+      // 如果最新的睡觉记录有"开始睡觉"但没有"结束"，则表示正在睡觉
+      sleeping = latestSleep.note && latestSleep.note.includes('开始睡觉') && !latestSleep.note.includes('结束');
+    }
+  } catch (err) {
+    success = false;
+    log.error(err, '/dailylog/sleep/status');
+  }
+  res.json({ success, sleeping, lastSleep });
 });
 
 // 更新记录
