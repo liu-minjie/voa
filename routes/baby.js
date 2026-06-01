@@ -1076,7 +1076,7 @@ router.get('/dailylog/sleep/status', function(req, res) {
       const latestSleep = sleepLogs[0];
       lastSleep = latestSleep;
       // 如果最新的睡觉记录有"开始睡觉"但没有"结束"，则表示正在睡觉
-      sleeping = latestSleep.note && latestSleep.note.includes('开始睡觉') && !latestSleep.note.includes('结束');
+      sleeping = !latestSleep.endat;
     }
   } catch (err) {
     success = false;
@@ -1131,6 +1131,10 @@ router.post('/dailylog/update', function(req, res) {
         }
       });
     }
+
+	if (!data.endat) {
+		data.endat = moment().format('YYYY-MM-DD HH:mm:ss');
+	}
     
     data.updateat = moment().format('YYYY-MM-DD HH:mm:ss');
     data.createat = data.createat || logs[logIndex].createat;
