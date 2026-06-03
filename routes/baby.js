@@ -1132,7 +1132,7 @@ router.post('/dailylog/update', function(req, res) {
       });
     }
 
-	if (!data.endat) {
+	if (!data.endat && req.query.action === 'end') {
 		data.endat = moment().format('YYYY-MM-DD HH:mm:ss');
 	}
     
