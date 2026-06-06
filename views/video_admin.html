@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>视频管理</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding: 15px 20px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .header h1 {
+      font-size: 20px;
+      color: #333;
+    }
+    .stats {
+      font-size: 14px;
+      color: #666;
+    }
+    .filter-bar {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 20px;
+      padding: 15px 20px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      flex-wrap: wrap;
+    }
+    .filter-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .filter-item label {
+      font-size: 14px;
+      color: #666;
+    }
+    .filter-item select, .filter-item input {
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: #4CAF50;
+      color: white;
+    }
+    .btn-primary:hover {
+      background: #45a049;
+    }
+    .btn-danger {
+      background: #f44336;
+      color: white;
+    }
+    .btn-danger:hover {
+      background: #da190b;
+    }
+    .btn-warning {
+      background: #ff9800;
+      color: white;
+    }
+    .btn-warning:hover {
+      background: #e68a00;
+    }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .video-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+    }
+    .video-card {
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .video-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    }
+    .video-thumbnail {
+      width: 100%;
+      height: 180px;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .video-thumbnail img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+    .video-thumbnail .play-icon {
+      position: absolute;
+      width: 50px;
+      height: 50px;
+      background: rgba(0,0,0,0.6);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 20px;
+    }
+    .video-info {
+      padding: 15px;
+    }
+    .video-name {
+      font-size: 14px;
+      font-weight: 500;
+      color: #333;
+      margin-bottom: 8px;
+      word-break: break-all;
+    }
+    .video-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 12px;
+      color: #999;
+      margin-bottom: 12px;
+    }
+    .video-meta span {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .video-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .video-actions .btn {
+      flex: 1;
+      min-width: 70px;
+      text-align: center;
+      padding: 8px;
+      font-size: 12px;
+    }
+    .compress-options {
+      padding: 15px;
+      background: #f9f9f9;
+      border-top: 1px solid #eee;
+    }
+    .compress-options h4 {
+      font-size: 14px;
+      color: #333;
+      margin-bottom: 10px;
+    }
+    .compress-form {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .compress-form select {
+      padding: 6px 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    .loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .loading-box {
+      background: white;
+      padding: 30px 50px;
+      border-radius: 10px;
+      text-align: center;
+    }
+    .loading-box .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #4CAF50;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 15px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .progress-bar {
+      width: 300px;
+      height: 20px;
+      background: #eee;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+    .progress-bar .fill {
+      height: 100%;
+      background: linear-gradient(90deg, #4CAF50, #8BC34A);
+      transition: width 0.3s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 12px;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #999;
+      font-size: 16px;
+    }
+    .size-large {
+      color: #f44336;
+      font-weight: 500;
+    }
+    .size-medium {
+      color: #ff9800;
+    }
+    .size-small {
+      color: #4CAF50;
+    }
+    .checkbox-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .checkbox-wrapper input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+    }
+    .batch-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+      padding: 15px 20px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      margin-top: 20px;
+      padding: 15px 20px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .pagination .btn {
+      padding: 8px 16px;
+    }
+    .pagination .page-info {
+      font-size: 14px;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>📹 视频管理</h1>
+    <div class="stats">
+      <span id="totalCount">共 0 个视频</span>，
+      <span id="totalSize">总大小 0 MB</span>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <div class="filter-item">
+      <label>显示:</label>
+      <select id="filterSize" onchange="renderVideos()">
+        <option value="all">全部</option>
+        <option value="large">>100MB</option>
+        <option value="medium">50-100MB</option>
+        <option value="small"><50MB</option>
+      </select>
+    </div>
+    <div class="filter-item">
+      <label>搜索:</label>
+      <input type="text" id="searchKeyword" placeholder="文件名关键词" onkeyup="renderVideos()" style="width: 150px;">
+    </div>
+    <button class="btn btn-primary" onclick="refreshList()">🔄 刷新列表</button>
+  </div>
+
+  <div id="videoGrid" class="video-grid"></div>
+
+  <div class="batch-actions" id="batchActions" style="display: none;">
+    <span id="selectedCount">已选 0 个</span>
+    <button class="btn btn-warning" onclick="batchCompress()">批量压缩选中</button>
+    <button class="btn btn-danger" onclick="batchDelete()">删除选中</button>
+    <button class="btn" onclick="selectAll()">全选</button>
+    <button class="btn" onclick="deselectAll()">取消全选</button>
+  </div>
+
+  <div class="pagination" id="pagination">
+    <button class="btn" id="prevBtn" onclick="changePage(-1)">上一页</button>
+    <span class="page-info" id="pageInfo">第 1 页 / 共 1 页</span>
+    <button class="btn" id="nextBtn" onclick="changePage(1)">下一页</button>
+  </div>
+
+  <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+    <div class="loading-box">
+      <div class="spinner"></div>
+      <div id="loadingText">处理中...</div>
+      <div id="progressBar" class="progress-bar" style="display: none;">
+        <div class="fill" style="width: 0%">0%</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let videos = [];
+    let allVideos = [];
+    let selectedFiles = new Set();
+    let currentPage = 1;
+    let pageSize = 20;
+    let totalPages = 1;
+    let totalCount = 0;
+
+    function formatSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+      return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+    }
+
+    function getSizeClass(bytes) {
+      if (bytes > 100 * 1024 * 1024) return 'size-large';
+      if (bytes > 50 * 1024 * 1024) return 'size-medium';
+      return 'size-small';
+    }
+
+    function showLoading(text, showProgress = false) {
+      document.getElementById('loadingText').textContent = text;
+      document.getElementById('progressBar').style.display = showProgress ? 'block' : 'none';
+      document.getElementById('loadingOverlay').style.display = 'flex';
+    }
+
+    function hideLoading() {
+      document.getElementById('loadingOverlay').style.display = 'none';
+    }
+
+    function updateProgress(percent) {
+      const fill = document.querySelector('.progress-bar .fill');
+      fill.style.width = percent + '%';
+      fill.textContent = percent + '%';
+    }
+
+    async function loadVideos(page = 1) {
+      try {
+        currentPage = page;
+        const res = await fetch(`/baby/video/files?page=${page}&pageSize=${pageSize}`);
+        const data = await res.json();
+        
+        if (data.success) {
+          videos = data.data || [];
+          totalCount = data.total || 0;
+          totalPages = Math.ceil(totalCount / pageSize) || 1;
+          
+          // 更新统计（需要从后端获取总大小）
+          // 这里先简化处理
+          const totalSize = videos.reduce((sum, v) => sum + v.size, 0);
+          document.getElementById('totalCount').textContent = `共 ${totalCount} 个视频`;
+          document.getElementById('totalSize').textContent = `总大小 ${formatSize(totalSize)}`;
+          
+          renderVideos();
+          updatePagination();
+        } else {
+          alert('加载失败: ' + data.message);
+        }
+      } catch (err) {
+        console.error('加载视频列表失败:', err);
+        document.getElementById('videoGrid').innerHTML = '<div class="empty-state">加载失败，请刷新重试</div>';
+      }
+    }
+    
+    function changePage(delta) {
+      const newPage = currentPage + delta;
+      if (newPage >= 1 && newPage <= totalPages) {
+        loadVideos(newPage);
+      }
+    }
+    
+    function updatePagination() {
+      const prevBtn = document.getElementById('prevBtn');
+      const nextBtn = document.getElementById('nextBtn');
+      const pageInfo = document.getElementById('pageInfo');
+      
+      prevBtn.disabled = currentPage <= 1;
+      nextBtn.disabled = currentPage >= totalPages;
+      pageInfo.textContent = `第 ${currentPage} 页 / 共 ${totalPages} 页`;
+    }
+
+    function getFilteredVideos() {
+      let filtered = [...videos];
+      
+      // 过滤大小
+      const filterSize = document.getElementById('filterSize').value;
+      if (filterSize === 'large') {
+        filtered = filtered.filter(v => v.size > 100 * 1024 * 1024);
+      } else if (filterSize === 'medium') {
+        filtered = filtered.filter(v => v.size > 50 * 1024 * 1024 && v.size <= 100 * 1024 * 1024);
+      } else if (filterSize === 'small') {
+        filtered = filtered.filter(v => v.size <= 50 * 1024 * 1024);
+      }
+      
+      // 搜索
+      const keyword = document.getElementById('searchKeyword').value.trim().toLowerCase();
+      if (keyword) {
+        filtered = filtered.filter(v => v.name.toLowerCase().includes(keyword));
+      }
+      
+      return filtered;
+    }
+
+    function renderVideos() {
+      const filtered = getFilteredVideos();
+      const grid = document.getElementById('videoGrid');
+      
+      if (filtered.length === 0) {
+        grid.innerHTML = '<div class="empty-state">暂无视频文件</div>';
+        return;
+      }
+      
+      grid.innerHTML = filtered.map(video => {
+        const isSelected = selectedFiles.has(video.name);
+        const time = video.mtime || video.createat;
+        return `
+          <div class="video-card">
+            <div class="video-thumbnail">
+              <img src="/baby/video/thumb/${video.name}" alt="${video.name}" onerror="this.onerror=null; this.parentElement.innerHTML='<span style=\\'color: #666;\\'>无缩略图</span>';">
+              <div class="play-icon" onclick="playVideo('${video.name}')">▶</div>
+            </div>
+            <div class="video-info">
+              <div class="video-name">${escapeHtml(video.name)}</div>
+              <div class="video-meta">
+                <span class="${getSizeClass(video.size)}">${formatSize(video.size)}</span>
+                <span>📅 ${new Date(time).toLocaleString()}</span>
+                ${video.tag ? `<span>🏷️ ${escapeHtml(video.tag)}</span>` : ''}
+                ${video.compressed ? '<span style="color: #4CAF50;">✓ 已压缩</span>' : ''}
+              </div>
+              <div class="video-actions">
+                <button class="btn btn-primary" onclick="playVideo('${video.name}')">▶ 播放</button>
+                <button class="btn" onclick="generateThumbnail('${video.name}')">🖼️ 生成缩略图</button>
+                <button class="btn btn-warning" onclick="compressVideo('${video.name}')" ${video.size < 10 * 1024 * 1024 ? 'disabled title="文件太小，无需压缩"' : ''}>🗜️ 压缩</button>
+                <button class="btn btn-danger" onclick="deleteVideo('${video.name}', ${video.id})">🗑️ 删除</button>
+              </div>
+            </div>
+            <div class="compress-options">
+              <h4>压缩选项</h4>
+              <div class="compress-form">
+                <select id="quality-${video.name}">
+                  <option value="high">高质量 (720p, 3Mbps)</option>
+                  <option value="medium" selected>中等质量 (720p, 2Mbps)</option>
+                  <option value="low">低质量 (480p, 1Mbps)</option>
+                </select>
+                <label class="checkbox-wrapper">
+                  <input type="checkbox" id="removeAudio-${video.name}">
+                  去除音频
+                </label>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      
+      updateBatchActions();
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    async function generateThumbnail(filename) {
+      showLoading('正在生成缩略图...');
+      
+      try {
+        const res = await fetch(`/baby/video/thumbnail`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          alert('缩略图生成成功！');
+          // 刷新页面显示新的缩略图
+          loadVideos(currentPage);
+        } else {
+          alert('缩略图生成失败：' + data.message);
+        }
+      } catch (err) {
+        console.error('生成缩略图失败:', err);
+        alert('生成缩略图失败：' + err.message);
+      } finally {
+        hideLoading();
+      }
+    }
+
+    function playVideo(filename) {
+      window.open(`/baby/video/play/${filename}`, '_blank', 'width=800,height=600');
+    }
+
+    function getCompressOptions(filename) {
+      const qualityMap = {
+        'high': { width: 1280, height: 720, videoBitrate: '3000k', preset: 'slow' },
+        'medium': { width: 1280, height: 720, videoBitrate: '2000k', preset: 'medium' },
+        'low': { width: 854, height: 480, videoBitrate: '1000k', preset: 'fast' }
+      };
+      
+      const quality = document.getElementById(`quality-${filename}`)?.value || 'medium';
+      const removeAudio = document.getElementById(`removeAudio-${filename}`)?.checked || false;
+      
+      return {
+        ...qualityMap[quality],
+        removeAudio
+      };
+    }
+
+    async function compressVideo(filename) {
+      const options = getCompressOptions(filename);
+      const action = options.removeAudio ? '压缩并去除音频' : '压缩';
+      
+      if (!confirm(`确定要${action} "${filename}" 吗？`)) return;
+      
+      showLoading(`正在压缩 ${filename}...`, true);
+      
+      try {
+        const res = await fetch(`/baby/video/compress`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filename,
+            width: options.width,
+            height: options.height,
+            videoBitrate: options.videoBitrate,
+            preset: options.preset,
+            removeAudio: options.removeAudio
+          })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          alert(`压缩完成！\n原始大小: ${formatSize(data.originalSize)}\n压缩后: ${formatSize(data.compressedSize)}\n节省: ${((1 - data.compressedSize / data.originalSize) * 100).toFixed(1)}%`);
+          loadVideos();
+        } else {
+          alert('压缩失败: ' + data.message);
+        }
+      } catch (err) {
+        console.error('压缩失败:', err);
+        alert('压缩失败: ' + err.message);
+      } finally {
+        hideLoading();
+      }
+    }
+
+    async function deleteVideo(filename, id) {
+      if (!confirm(`确定要删除 "${filename}" 吗？此操作不可恢复！`)) return;
+      
+      showLoading('正在删除...');
+      
+      try {
+        const res = await fetch(`/baby/video/delete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename, id })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          alert('删除成功');
+          loadVideos();
+        } else {
+          alert('删除失败: ' + data.message);
+        }
+      } catch (err) {
+        console.error('删除失败:', err);
+        alert('删除失败: ' + err.message);
+      } finally {
+        hideLoading();
+      }
+    }
+
+    function refreshList() {
+      loadVideos();
+    }
+
+    // 批量选择功能
+    function toggleSelect(filename) {
+      if (selectedFiles.has(filename)) {
+        selectedFiles.delete(filename);
+      } else {
+        selectedFiles.add(filename);
+      }
+      renderVideos();
+    }
+
+    function updateBatchActions() {
+      const count = selectedFiles.size;
+      const batchDiv = document.getElementById('batchActions');
+      const countSpan = document.getElementById('selectedCount');
+      
+      if (count > 0) {
+        batchDiv.style.display = 'flex';
+        countSpan.textContent = `已选 ${count} 个`;
+      } else {
+        batchDiv.style.display = 'none';
+      }
+    }
+
+    function selectAll() {
+      const filtered = getFilteredVideos();
+      filtered.forEach(v => selectedFiles.add(v.name));
+      renderVideos();
+    }
+
+    function deselectAll() {
+      selectedFiles.clear();
+      renderVideos();
+    }
+
+    async function batchCompress() {
+      const files = Array.from(selectedFiles);
+      if (files.length === 0) {
+        alert('请先选择要压缩的视频');
+        return;
+      }
+      
+      if (!confirm(`确定要压缩 ${files.length} 个视频吗？`)) return;
+      
+      showLoading(`正在批量压缩 (0/${files.length})...`, true);
+      
+      let successCount = 0;
+      let failCount = 0;
+      
+      for (let i = 0; i < files.length; i++) {
+        const filename = files[i];
+        updateProgress(Math.round((i / files.length) * 100));
+        
+        try {
+          const options = getCompressOptions(filename);
+          const res = await fetch(`/baby/video/compress`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filename,
+              width: options.width,
+              height: options.height,
+              videoBitrate: options.videoBitrate,
+              preset: options.preset,
+              removeAudio: options.removeAudio
+            })
+          });
+          
+          const data = await res.json();
+          if (data.success) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (err) {
+          failCount++;
+        }
+        
+        document.getElementById('loadingText').textContent = `正在批量压缩 (${i + 1}/${files.length})...`;
+      }
+      
+      hideLoading();
+      selectedFiles.clear();
+      alert(`批量压缩完成！\n成功: ${successCount} 个\n失败: ${failCount} 个`);
+      loadVideos();
+    }
+
+    async function batchDelete() {
+      const files = Array.from(selectedFiles);
+      if (files.length === 0) {
+        alert('请先选择要删除的视频');
+        return;
+      }
+      
+      if (!confirm(`确定要删除 ${files.length} 个视频吗？此操作不可恢复！`)) return;
+      
+      showLoading(`正在批量删除 (0/${files.length})...`, true);
+      
+      let successCount = 0;
+      let failCount = 0;
+      
+      for (let i = 0; i < files.length; i++) {
+        const filename = files[i];
+        updateProgress(Math.round((i / files.length) * 100));
+        
+        try {
+          const res = await fetch(`/baby/video/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename })
+          });
+          
+          const data = await res.json();
+          if (data.success) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (err) {
+          failCount++;
+        }
+        
+        document.getElementById('loadingText').textContent = `正在批量删除 (${i + 1}/${files.length})...`;
+      }
+      
+      hideLoading();
+      selectedFiles.clear();
+      alert(`批量删除完成！\n成功: ${successCount} 个\n失败: ${failCount} 个`);
+      loadVideos();
+    }
+
+    // 页面加载时获取列表
+    loadVideos();
+  </script>
+</body>
+</html>

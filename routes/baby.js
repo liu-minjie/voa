@@ -218,9 +218,9 @@ router.post('/image/upload',  function(req, res) {
     }
 
     let filename = '';
+    let thumbFilename = '';
     let success = true;
 		try {
-
 
     const part = files.image[0].path.split('/');
     filename = part[part.length - 1];
@@ -233,6 +233,8 @@ router.post('/image/upload',  function(req, res) {
       const thumbPath = files.thumb[0].path;
       const thumbName = path.parse(filename).name + '.webp';
       const targetThumbPath = path.join(thumbDir, thumbName);
+	  thumbFilename = thumbName;
+      
       fs.renameSync(thumbPath, targetThumbPath);
     }
 
@@ -260,7 +262,8 @@ router.post('/image/upload',  function(req, res) {
 			success,
 			message: '上传' + (success ? '成功' : '失败'),
 			data: {
-				filename: filename
+				filename: filename,
+				thumb: thumbFilename
 			}
 		});
   });
@@ -594,68 +597,338 @@ router.post('/video/upload', function(req, res) {
 	req.pipe(busboy);
 });
 
+// 获取视频文件列表
+router.get('/video/files', function(req, res) {
+  crossDomain(req, res);
+  let success = true;
+  let data = [];
+  let total = 0;
+  
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 20;
+    const uploadDir = path.join(dataPath, 'upload/video');
+    
+    delete require.cache[require.resolve(path.join(dataPath, 'video.json'))];
+    const videos = require(path.join(dataPath, 'video.json'));
+    
+    total = videos.length;
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    
+    data = videos.slice(startIndex, endIndex).map(video => {
+      let size = 0;
+      let mtime = null;
+      
+      const filePath = path.join(uploadDir, video.name);
+      if (fs.existsSync(filePath)) {
+        const stats = fs.statSync(filePath);
+        size = stats.size;
+        mtime = stats.mtime;
+      }
+      
+      return {
+        id: video.id,
+        name: video.name,
+        originalName: video.originalName || video.name,
+        tag: video.tag || '',
+        createat: video.createat,
+        updateat: video.updateat || null,
+        size: size,
+        mtime: mtime,
+        compressed: video.compressed || false
+      };
+    });
+  } catch (err) {
+    success = false;
+    log.error(err, '/video/files');
+  }
+  
+  res.json({ success, data, total });
+});
+
+// 获取视频缩略图
+router.get('/video/thumb/:filename', function(req, res) {
+  const filename = req.params.filename;
+  const thumbDir = path.join(dataPath, 'upload/image/thumb');
+  const thumbPath = path.join(thumbDir, filename.replace(/\.[^.]+$/, '.webp'));
+  
+  if (fs.existsSync(thumbPath)) {
+    res.sendFile(thumbPath);
+  } else {
+    res.status(404).send('缩略图不存在');
+  }
+});
+
+// 播放视频页面
+router.get('/video/play/:filename', function(req, res) {
+  const filename = req.params.filename;
+  const videoPath = path.join(dataPath, 'upload/video', filename);
+  
+  if (!fs.existsSync(videoPath)) {
+    return res.status(404).send('视频不存在');
+  }
+  
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>播放视频</title>
+      <style>
+        * { margin: 0; padding: 0; }
+        body { background: #000; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        video { max-width: 100%; max-height: 100vh; }
+      </style>
+    </head>
+    <body>
+      <video src="/baby/video/file/${filename}" controls autoplay></video>
+    </body>
+    </html>
+  `);
+});
+
+// 视频文件流
+router.get('/video/file/:filename', function(req, res) {
+  const filename = req.params.filename;
+  const videoPath = path.join(dataPath, 'upload/video', filename);
+  
+  if (!fs.existsSync(videoPath)) {
+    return res.status(404).send('视频不存在');
+  }
+  
+  const stat = fs.statSync(videoPath);
+  const fileSize = stat.size;
+  const range = req.headers.range;
+  
+  if (range) {
+    const parts = range.replace(/bytes=/, '').split('-');
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+    const chunksize = (end - start) + 1;
+    const file = fs.createReadStream(videoPath, { start, end });
+    
+    res.writeHead(206, {
+      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': chunksize,
+      'Content-Type': 'video/mp4'
+    });
+    
+    file.pipe(res);
+  } else {
+    res.writeHead(200, {
+      'Content-Length': fileSize,
+      'Content-Type': 'video/mp4'
+    });
+    fs.createReadStream(videoPath).pipe(res);
+  }
+});
+
+// 压缩视频
+router.post('/video/compress', function(req, res) {
+  crossDomain(req, res);
+  let success = true;
+  let message = '';
+  let originalSize = 0;
+  let compressedSize = 0;
+  
+  try {
+    const { filename, width, height, videoBitrate, preset, removeAudio } = req.body;
+    
+    if (!filename) {
+      return res.json({ success: false, message: '缺少文件名' });
+    }
+    
+    const inputPath = path.join(dataPath, 'upload/video', filename);
+    const outputFilename = filename.replace(/\.[^.]+$/, '_compressed.mp4');
+    const outputPath = path.join(dataPath, 'upload/video', outputFilename);
+    
+    if (!fs.existsSync(inputPath)) {
+      return res.json({ success: false, message: '视频文件不存在' });
+    }
+    
+    originalSize = fs.statSync(inputPath).size;
+    
+    // 构建 ffmpeg 命令
+    const command = ffmpeg(inputPath)
+      .outputOptions([
+        `-vf scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`,
+        `-b:v ${videoBitrate}`,
+        `-preset ${preset || 'medium'}`,
+        '-c:v libx264',
+        '-movflags +faststart'
+      ]);
+    
+    if (removeAudio) {
+      command.noAudio();
+    } else {
+      command.audioCodec('aac').audioBitrate('128k');
+    }
+    
+    command
+      .on('end', () => {
+        try {
+          compressedSize = fs.statSync(outputPath).size;
+          
+          // 如果压缩后更小，则替换原文件
+          if (compressedSize < originalSize) {
+            const backupPath = path.join(dataPath, 'upload/video', filename.replace(/\.[^.]+$/, '_backup.mp4'));
+            fs.renameSync(inputPath, backupPath);
+            fs.renameSync(outputPath, inputPath);
+            fs.unlinkSync(backupPath);
+            
+            // 更新 video.json，标记为已压缩
+            delete require.cache[require.resolve(path.join(dataPath, 'video.json'))];
+            let videos = require(path.join(dataPath, 'video.json'));
+            
+            const videoIndex = videos.findIndex(v => v.name === filename);
+            if (videoIndex !== -1) {
+              videos[videoIndex] = {
+                ...videos[videoIndex],
+                compressed: true,
+                updateat: moment().format('YYYY-MM-DD HH:mm:ss')
+              };
+              writeFileSync('./video.json', videos);
+            }
+          } else {
+            // 压缩后更大，删除压缩文件
+            fs.unlinkSync(outputPath);
+          }
+          
+          res.json({
+            success: true,
+            message: '压缩完成',
+            originalSize,
+            compressedSize: compressedSize < originalSize ? compressedSize : originalSize,
+            savedSize: compressedSize < originalSize ? originalSize - compressedSize : 0
+          });
+        } catch (err) {
+          log.error(err, '/video/compress end');
+          res.json({ success: false, message: '保存压缩结果失败' });
+        }
+      })
+      .on('error', (err) => {
+        log.error(err, '/video/compress');
+        res.json({ success: false, message: '压缩失败：' + err.message });
+      })
+      .save(outputPath);
+      
+  } catch (err) {
+    success = false;
+    message = err.message;
+    log.error(err, '/video/compress');
+    res.json({ success: false, message });
+  }
+});
+
+// 生成视频缩略图
+router.post('/video/thumbnail', function(req, res) {
+  crossDomain(req, res);
+  let success = true;
+  let message = '';
+  
+  try {
+    const { filename } = req.body;
+    
+    if (!filename) {
+      return res.json({ success: false, message: '缺少文件名' });
+    }
+    
+    const videoPath = path.join(dataPath, 'upload/video', filename);
+    
+    if (!fs.existsSync(videoPath)) {
+      return res.json({ success: false, message: '视频文件不存在' });
+    }
+    
+    const thumbDir = ensureDir(path.join(dataPath, 'upload/image'), 'thumb');
+    const thumbName = path.parse(filename).name + '.webp';
+    const thumbPath = path.join(thumbDir, thumbName);
+    
+    // 如果缩略图已存在，先删除
+    if (fs.existsSync(thumbPath)) {
+      fs.unlinkSync(thumbPath);
+    }
+    
+    // 使用 ffmpeg 生成缩略图
+    ffmpeg(videoPath)
+      .screenshots({
+        count: 1,
+        folder: thumbDir,
+        filename: thumbName,
+        size: '320x?',
+        timemarks: ['0.5']
+      })
+      .on('end', () => {
+        res.json({ success: true, message: '缩略图生成成功' });
+      })
+      .on('error', (err) => {
+        log.error(err, '/video/thumbnail');
+        res.json({ success: false, message: '缩略图生成失败：' + err.message });
+      });
+  } catch (err) {
+    success = false;
+    message = err.message;
+    log.error(err, '/video/thumbnail');
+    res.json({ success: false, message });
+  }
+});
+
 // 删除视频
-router.options('/video/delete', function(req, res) {
-	crossDomain(req, res);
-  res.json({
-		success: true
-	});
-});
 router.post('/video/delete', function(req, res) {
-	crossDomain(req, res);
-	let success = true;
-	try {
-
-	delete require.cache[require.resolve(path.join(dataPath, 'video.json'))];
-	const videos = require(path.join(dataPath, 'video.json'));
-	const videoId = req.body.id;
-
-	// 找到要删除的视频
-	const videoIndex = videos.findIndex(video => video.id == videoId);
-	if (videoIndex === -1) {
-		return res.json({
-			success: false,
-			message: '视频不存在'
-		});
-	}
-
-	// 获取要删除的视频信息
-	const videoToDelete = videos[videoIndex];
-	
-	// 移动视频文件到remove目录
-	if (videoToDelete.name) {
-    //删除thumb
-		const videoPath = path.join(dataPath, `upload/video/${videoToDelete.name}`);
-		if (fs.existsSync(videoPath)) {
-			try {
-				const removeDir = ensureDir(path.join(dataPath, 'upload/video'), 'remove');
-				const targetPath = path.join(removeDir, videoToDelete.name);
-				fs.renameSync(videoPath, targetPath);
-			} catch (err) {
-				log.error(err, '/video/delete renameSync')
-			}
-		}
-	}
-
-	// 移动视频记录到video_remove.json
-	const videoRemoveData = ensureJson('./video_remove.json', []);
-	videoRemoveData.unshift(videoToDelete);
-	writeFileSync('./video_remove.json', videoRemoveData);
-
-	// 从数组中删除视频
-	videos.splice(videoIndex, 1);
-	writeFileSync('./video.json', videos);
-
-	} catch (err) {
-		success = false
-		log.error(err, '/video/delete')
-	}
-
-	res.json({
-		success,
-		message: '删除' + (success ? '成功' : '失败')
-	});
+  crossDomain(req, res);
+  let success = true;
+  let message = '';
+  
+  try {
+    const { filename, id } = req.body;
+    
+    if (!filename) {
+      return res.json({ success: false, message: '缺少文件名' });
+    }
+    
+    const videoPath = path.join(dataPath, 'upload/video', filename);
+    
+    if (!fs.existsSync(videoPath)) {
+      return res.json({ success: false, message: '视频文件不存在' });
+    }
+    
+    fs.unlinkSync(videoPath);
+    
+    // 同时删除对应的缩略图（如果有的话）
+    const thumbDir = path.join(dataPath, 'upload/image/thumb');
+    const thumbPath = path.join(thumbDir, filename.replace(/\.[^.]+$/, '.webp'));
+    if (fs.existsSync(thumbPath)) {
+      fs.unlinkSync(thumbPath);
+    }
+    
+    // 从 video.json 中删除记录
+    delete require.cache[require.resolve(path.join(dataPath, 'video.json'))];
+    let videos = require(path.join(dataPath, 'video.json'));
+    
+    // 可以通过 id 或 filename 来删除
+    if (id) {
+      videos = videos.filter(v => v.id != id);
+    } else {
+      videos = videos.filter(v => v.name !== filename);
+    }
+    
+    writeFileSync('./video.json', videos);
+    
+    res.json({ success: true, message: '删除成功' });
+  } catch (err) {
+    success = false;
+    message = err.message;
+    log.error(err, '/video/delete');
+    res.json({ success: false, message });
+  }
 });
+
+// 获取视频管理页面
+router.get('/video/admin', function(req, res) {
+  res.sendFile(path.join(__dirname, '../views/video_admin.html'));
+});
+
 // 更新视频
 router.options('/video/update', function(req, res) {
 	crossDomain(req, res);
