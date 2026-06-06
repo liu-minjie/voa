@@ -180,6 +180,184 @@ router.get('/image/item/:name', function(req, res, next) {
     }
   });
 });
+// 获取图片列表（后台管理用）
+router.get('/image/admin/list', function(req, res) {
+  crossDomain(req, res);
+  let success = true;
+  let data = [];
+  let total = 0;
+  
+  try {
+    const type = req.query.type || 'gallery'; // gallery, record, dailylog
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 20;
+    
+    let allImages = [];
+    
+    if (type === 'gallery') {
+      // 相册图片
+      delete require.cache[require.resolve(path.join(dataPath, 'image.json'))];
+      const images = require(path.join(dataPath, 'image.json'));
+      allImages = images.map(img => ({
+        id: img.id,
+        name: img.name,
+        originalName: img.originalName || img.name,
+        url: img.name,
+        createat: img.createat,
+        source: 'gallery',
+        sourceId: img.id
+      }));
+    } else if (type === 'record') {
+      // 记录中的图片
+      delete require.cache[require.resolve(path.join(dataPath, 'record.json'))];
+      const records = require(path.join(dataPath, 'record.json'));
+      records.forEach(record => {
+        if (record.items) {
+          record.items.forEach((item, itemIndex) => {
+            if (item.images) {
+              item.images.forEach((img, imgIndex) => {
+                allImages.push({
+                  id: `${record.id}-${itemIndex}-${imgIndex}`,
+                  name: img.url,
+                  originalName: img.url,
+                  url: img.url,
+                  createat: record.createat,
+                  source: 'record',
+                  sourceId: record.id,
+                  itemIndex: itemIndex,
+                  imgIndex: imgIndex
+                });
+              });
+            }
+          });
+        }
+      });
+    } else if (type === 'dailylog') {
+      // 日常日志中的图片
+      delete require.cache[require.resolve(path.join(dataPath, 'daily_log.json'))];
+      const logs = require(path.join(dataPath, 'daily_log.json'));
+      logs.forEach(log => {
+        if (log.images) {
+          log.images.forEach((img, imgIndex) => {
+            allImages.push({
+              id: `${log.id}-${imgIndex}`,
+              name: img.url,
+              originalName: img.url,
+              url: img.url,
+              createat: log.createat,
+              source: 'dailylog',
+              sourceId: log.id,
+              imgIndex: imgIndex
+            });
+          });
+        }
+      });
+    }
+    
+    // 按创建时间倒序
+    allImages.sort((a, b) => new Date(b.createat) - new Date(a.createat));
+    
+    total = allImages.length;
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    data = allImages.slice(startIndex, endIndex);
+    
+    // 添加文件大小信息
+    data = data.map(img => {
+      let size = 0;
+      const filePath = path.join(dataPath, `upload/image/${img.url}`);
+      if (fs.existsSync(filePath)) {
+        const stats = fs.statSync(filePath);
+        size = stats.size;
+      }
+      return { ...img, size };
+    });
+  } catch (err) {
+    success = false;
+    log.error(err, '/image/admin/list');
+  }
+  
+  res.json({ success, data, total });
+});
+
+// 检查图片缩略图是否存在
+router.get('/image/check-thumbnail', function(req, res) {
+  crossDomain(req, res);
+  let success = true;
+  let exists = false;
+
+  try {
+    const filename = req.query.filename;
+
+    if (!filename) {
+      return res.json({ success: false, message: '缺少文件名' });
+    }
+
+    const thumbDir = path.join(dataPath, 'upload/image/thumb');
+    const thumbName = path.parse(filename).name + '.webp';
+    const thumbPath = path.join(thumbDir, thumbName);
+
+    exists = fs.existsSync(thumbPath);
+  } catch (err) {
+    success = false;
+    log.error(err, '/image/check-thumbnail');
+  }
+
+  res.json({ success, exists });
+});
+
+// 上传图片缩略图（前端生成后上传）
+router.post('/image/upload-thumbnail', function(req, res) {
+  crossDomain(req, res);
+
+  const busboy = Busboy({
+    headers: req.headers,
+    limits: {
+      fileSize: 2 * 1024 * 1024 // 缩略图限制 2MB
+    }
+  });
+
+  let thumbFilePath = null;
+  let filename = null;
+
+  busboy.on('file', function(fieldname, stream, info) {
+    if (fieldname === 'thumb') {
+      const thumbDir = ensureDir(path.join(dataPath, 'upload/image'), 'thumb');
+      const thumbName = path.parse(info.filename).name + '.webp';
+      thumbFilePath = path.join(thumbDir, thumbName);
+
+      // 如果缩略图已存在，先删除
+      if (fs.existsSync(thumbFilePath)) {
+        fs.unlinkSync(thumbFilePath);
+      }
+
+      const writeStream = fs.createWriteStream(thumbFilePath);
+      stream.pipe(writeStream);
+    }
+  });
+
+  busboy.on('field', function(fieldname, val) {
+    if (fieldname === 'filename') {
+      filename = val;
+    }
+  });
+
+  busboy.on('finish', function() {
+    if (thumbFilePath) {
+      res.json({ success: true, message: '缩略图上传成功' });
+    } else {
+      res.json({ success: false, message: '未收到缩略图文件' });
+    }
+  });
+
+  busboy.on('error', function(err) {
+    log.error(err, '/image/upload-thumbnail');
+    res.json({ success: false, message: '上传失败：' + err.message });
+  });
+
+  req.pipe(busboy);
+});
+
 router.get('/image/list', function(req, res) {
 	crossDomain(req, res);
 	let image = [];
@@ -927,6 +1105,11 @@ router.post('/video/delete', function(req, res) {
 // 获取视频管理页面
 router.get('/video/admin', function(req, res) {
   res.sendFile(path.join(__dirname, '../views/video_admin.html'));
+});
+
+// 获取图片管理页面
+router.get('/image/admin', function(req, res) {
+  res.sendFile(path.join(__dirname, '../views/image_admin.html'));
 });
 
 // 更新视频
