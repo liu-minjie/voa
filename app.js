@@ -37,7 +37,17 @@ app.set('view engine', 'html');
 // uncomment after placing your favicon in /public
 //var favicon = require('serve-favicon');
 //app.use(favicon(__dirname + '/public/favicon.ico'));
-app.use('/public', express.static(path.join(__dirname, 'public')));
+
+app.use('/public', express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === '.wasm') {
+      res.setHeader('Content-Type', 'application/wasm');
+    } else if (ext === '.mjs') {
+      res.setHeader('Content-Type', 'application/javascript');
+    }
+  }
+}));
 app.use('/baby/avatar', express.static(path.join(dataPath, 'upload/avatar')));
 
 

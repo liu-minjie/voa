@@ -16,7 +16,7 @@
       display: flex;
       flex-direction: column;
       height: 100vh;
-      padding-bottom: env(safe-area-inset-bottom);
+      padding-bottom: calc(80px + env(safe-area-inset-bottom));
     }
     .section {
       background: white;
@@ -84,7 +84,7 @@
     }
     .list-item:active { background: #f9f9f9; }
     .list-item:last-child { border-bottom: none; }
-    .item-info { flex: 1; min-width: 0; margin-right: 12px; }
+    .item-info { flex: 1; min-width: 0; margin-right: 12px; cursor: pointer; }
     .item-info .name {
       font-size: 15px;
       color: #333;
@@ -117,6 +117,18 @@
     .btn-primary { background: #4CAF50; color: white; }
     .btn-warning { background: #ff9800; color: white; }
     .btn-danger { background: #f44336; color: white; }
+    .btn-play { background: #2196F3; color: white; }
+    .btn-info { background: #9c27b0; color: white; }
+    .btn-link { background: #673ab7; color: white; }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+    .mobile-actions {
+      padding: 6px 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: #f5f5f5;
+      font-size: 12px;
+      min-width: 60px;
+    }
     .dir-nav {
       padding: 10px 16px;
       background: #fafafa;
@@ -185,6 +197,91 @@
       border-radius: 6px;
     }
     .modal-actions .btn-cancel { background: #f5f5f5; color: #666; }
+    
+    /* 音乐播放器 */
+    .player-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #fff;
+      border-top: 1px solid #eee;
+      padding: 12px 16px;
+      padding-bottom: calc(12px + env(safe-area-inset-bottom));
+      z-index: 50;
+      display: none;
+      box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+    }
+    .player-bar.active { display: block; }
+    .player-info {
+      display: flex;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .player-title {
+      flex: 1;
+      font-size: 14px;
+      font-weight: 500;
+      color: #333;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .player-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .player-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    .player-btn:active { opacity: 0.8; }
+    .player-btn-pause { background: #ff9800; }
+    .player-progress {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .player-progress input[type="range"] {
+      flex: 1;
+      height: 4px;
+      -webkit-appearance: none;
+      background: #ddd;
+      border-radius: 2px;
+      outline: none;
+    }
+    .player-progress input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #4CAF50;
+      cursor: pointer;
+    }
+    .player-time {
+      font-size: 11px;
+      color: #999;
+      min-width: 40px;
+    }
+    .player-close {
+      background: #f5f5f5;
+      color: #666;
+      font-size: 12px;
+      padding: 6px 12px;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -205,6 +302,7 @@
     <div class="section">
       <div class="section-header">
         <h2>目录浏览</h2>
+        <button class="btn btn-primary btn-sm" onclick="showNewFolderModal()">新建文件夹</button>
       </div>
       <div class="dir-nav" id="dirNav">/</div>
       <div class="list-container" id="dirList">
@@ -212,6 +310,24 @@
       </div>
     </div>
   </div>
+
+  <!-- 音乐播放器 -->
+  <div class="player-bar" id="playerBar">
+    <div class="player-info">
+      <div class="player-title" id="playerTitle">未播放</div>
+      <button class="player-close" onclick="closePlayer()">关闭</button>
+    </div>
+    <div class="player-progress">
+      <span class="player-time" id="playerCurrentTime">00:00</span>
+      <input type="range" id="playerProgress" min="0" max="100" value="0" oninput="seekTo()">
+      <span class="player-time" id="playerTotalTime">00:00</span>
+    </div>
+    <div class="player-controls">
+      <button class="player-btn" id="playerPlayBtn" onclick="togglePlay()">▶</button>
+    </div>
+  </div>
+
+  <audio id="audioPlayer" style="display:none;"></audio>
 
   <div class="modal" id="renameModal">
     <div class="modal-content">
@@ -224,12 +340,468 @@
     </div>
   </div>
 
+  <div class="modal" id="newFolderModal">
+    <div class="modal-content">
+      <h3>新建文件夹</h3>
+      <input type="text" id="newFolderNameInput" placeholder="输入文件夹名称" autocomplete="off">
+      <div class="modal-actions">
+        <button class="btn btn-cancel" onclick="closeNewFolderModal()">取消</button>
+        <button class="btn btn-primary" onclick="createNewFolder()">确定</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     let searchResults = [];
     let currentDir = '';
     let renamePath = '';
     let searchTimer = null;
     let isComposing = false;
+    let audio = null;
+    let avbridgePlayer = null;
+    let isPlaying = false;
+    let currentFilePath = '';
+    let currentFilename = '';
+    let avbridgeLoaded = false;
+    let avbridgeLoading = false;
+    
+    let lastTapTime = 0;
+    let lastTapElement = null;
+    let selectedLinkSource = null;
+
+    const NATIVE_FORMATS = ['mp3', 'aac', 'm4a', 'ogg', 'oga', 'wav', 'flac', 'midi', 'mid'];
+    const AVPROBE_FORMATS = ['wma', 'wmv', 'flv'];
+
+    function handleTap(filePath, filename) {
+      const now = Date.now();
+      if (now - lastTapTime < 300 && lastTapElement === filePath) {
+        playMusicWithCache(filePath, filename);
+        lastTapTime = 0;
+        lastTapElement = null;
+      } else {
+        lastTapTime = now;
+        lastTapElement = filePath;
+      }
+    }
+
+    function handleMobileAction(select, filePath, filename) {
+      const action = select.value;
+      select.value = '';
+      if (!action) return;
+      switch(action) {
+        case 'play':
+          playMusic(filePath, filename);
+          break;
+        case 'link':
+          handleLinkClick({ stopPropagation: function(){} }, filePath, filename);
+          break;
+        case 'linkTo':
+          createHardLink(selectedLinkSource.path, filePath, filename);
+          break;
+        case 'rename':
+          showRenameModal(filename, filePath);
+          break;
+        case 'delete':
+          if (confirm('确定要删除 ' + filename + ' 吗？')) {
+            deleteFile(filePath);
+          }
+          break;
+      }
+    }
+
+    function handleLinkClick(e, filePath, filename) {
+      e.stopPropagation();
+      if (selectedLinkSource && selectedLinkSource.path === filePath) {
+        selectedLinkSource = null;
+        searchMusic();
+        return;
+      }
+      selectedLinkSource = { path: filePath, filename: filename };
+      searchMusic();
+    }
+
+    async function createHardLink(sourcePath, targetPath, targetFilename) {
+      try {
+        const res = await fetch('/song/link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sourcePath, targetPath, targetFilename })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('硬链接创建成功！');
+          selectedLinkSource = null;
+          searchMusic();
+        } else {
+          alert('创建失败: ' + data.message);
+        }
+      } catch (err) {
+        alert('创建失败: ' + err.message);
+      }
+    }
+
+    function getFileExtension(filename) {
+      return filename.split('.').pop().toLowerCase();
+    }
+
+    function shouldUseAvbridge(filename) {
+      const ext = getFileExtension(filename);
+      return AVPROBE_FORMATS.includes(ext);
+    }
+
+    function shouldUseTranscode(filename) {
+      const ext = getFileExtension(filename);
+      return ['ape'].includes(ext);
+    }
+
+    function loadAvbridge() {
+      return new Promise((resolve, reject) => {
+        if (avbridgeLoaded) {
+          resolve(window.AvbridgeVideoElement);
+          return;
+        }
+        if (avbridgeLoading) {
+          const check = setInterval(() => {
+            if (avbridgeLoaded) {
+              clearInterval(check);
+              resolve(window.AvbridgeVideoElement);
+            }
+          }, 100);
+          return;
+        }
+        avbridgeLoading = true;
+        
+        // 设置 libav 路径（必须在加载模块前设置）
+        window.AVBRIDGE_LIBAV_BASE = '/public/js/avbridge/vendor/libav';
+        
+        const script = document.createElement('script');
+        script.type = 'module';
+        script.src = '/public/js/avbridge/element-browser.js';
+        script.onload = () => {
+          const checkElement = () => {
+            if (customElements.get('avbridge-video')) {
+              avbridgeLoaded = true;
+              avbridgeLoading = false;
+              resolve(window.AvbridgeVideoElement);
+            } else {
+              setTimeout(checkElement, 50);
+            }
+          };
+          checkElement();
+        };
+        script.onerror = () => {
+          avbridgeLoading = false;
+          reject(new Error('Failed to load avbridge'));
+        };
+        document.head.appendChild(script);
+      });
+    }
+
+    function initPlayer() {
+      if (audio) return;
+      audio = document.getElementById('audioPlayer');
+      audio.addEventListener('timeupdate', updateProgress);
+      audio.addEventListener('loadedmetadata', updateDuration);
+      audio.addEventListener('ended', onAudioEnded);
+      audio.addEventListener('error', onAudioError);
+    }
+
+    async function playMusic(filePath, filename) {
+      closePlayer();
+      currentFilePath = filePath;
+      currentFilename = filename;
+      
+      document.getElementById('playerTitle').textContent = filename;
+      document.getElementById('playerBar').classList.add('active');
+      
+      if (shouldUseAvbridge(filename)) {
+        await playWithAvbridge(filePath, filename);
+      } else if (shouldUseTranscode(filename)) {
+        await playWithTranscode(filePath, filename);
+      } else {
+        await playWithNativeAudio(filePath, filename);
+      }
+    }
+
+    async function playWithAvbridge(filePath, filename) {
+      try {
+        console.log('[avbridge] 开始加载, filePath:', filePath);
+        await loadAvbridge();
+        console.log('[avbridge] avbridge 已加载');
+        
+        const audioUrl = `/song/file?path=${encodeURIComponent(filePath)}`;
+        console.log('[avbridge] audioUrl:', audioUrl);
+        
+        const elementClass = customElements.get('avbridge-video');
+        if (!elementClass) {
+          throw new Error('avbridge-video 自定义元素未注册');
+        }
+        
+        avbridgePlayer = new elementClass();
+        console.log('[avbridge] 元素已创建');
+        
+        avbridgePlayer.src = audioUrl;
+        avbridgePlayer.autoplay = true;
+        avbridgePlayer.controls = false;
+        
+        const container = document.getElementById('playerBar');
+        container.appendChild(avbridgePlayer);
+        avbridgePlayer.style.display = 'none';
+        
+        let avbridgeErrorHandled = false;
+        
+        avbridgePlayer.addEventListener('playing', () => {
+          console.log('[avbridge] playing event');
+          isPlaying = true;
+          document.getElementById('playerPlayBtn').textContent = '⏸';
+          document.getElementById('playerPlayBtn').classList.add('player-btn-pause');
+        });
+        
+        avbridgePlayer.addEventListener('pause', () => {
+          console.log('[avbridge] pause event');
+          isPlaying = false;
+          document.getElementById('playerPlayBtn').textContent = '▶';
+          document.getElementById('playerPlayBtn').classList.remove('player-btn-pause');
+        });
+        
+        avbridgePlayer.addEventListener('timeupdate', () => {
+          if (avbridgePlayer.duration) {
+            const progress = (avbridgePlayer.currentTime / avbridgePlayer.duration) * 100;
+            document.getElementById('playerProgress').value = progress;
+            document.getElementById('playerCurrentTime').textContent = formatTime(avbridgePlayer.currentTime);
+            document.getElementById('playerTotalTime').textContent = formatTime(avbridgePlayer.duration);
+          }
+        });
+        
+        avbridgePlayer.addEventListener('ended', () => {
+          console.log('[avbridge] ended event');
+          onAudioEnded();
+        });
+        
+        avbridgePlayer.addEventListener('error', (e) => {
+          if (avbridgeErrorHandled) return;
+          avbridgeErrorHandled = true;
+          console.error('[avbridge] error event:', e);
+          alert('播放错误: avbridge 无法加载文件');
+          closePlayer();
+        });
+        
+        console.log('[avbridge] 调用 play()');
+        if (typeof avbridgePlayer.play === 'function') {
+          await avbridgePlayer.play();
+          console.log('[avbridge] play() 调用完成');
+        } else {
+          throw new Error('play 方法不可用');
+        }
+      } catch (err) {
+        console.error('[avbridge] playWithAvbridge error:', err);
+        alert('播放失败: ' + err.message);
+      }
+    }
+
+    async function playWithTranscode(filePath, filename) {
+      if (!audio) initPlayer();
+      
+      const audioUrl = `/song/file?path=${encodeURIComponent(filePath)}&transcode=1`;
+      audio.src = audioUrl;
+      
+      audio.play().then(() => {
+        isPlaying = true;
+        document.getElementById('playerPlayBtn').textContent = '⏸';
+        document.getElementById('playerPlayBtn').classList.add('player-btn-pause');
+      }).catch(err => {
+        alert('播放失败: ' + err.message);
+      });
+    }
+
+    async function waitForTranscode(filePath, filename) {
+      document.getElementById('playerTitle').textContent = filename + ' (转码中...)';
+      document.getElementById('playerBar').classList.add('active');
+      
+      while (true) {
+        try {
+          const res = await fetch(`/song/transcode-status?path=${encodeURIComponent(filePath)}`);
+          const data = await res.json();
+          
+          if (data.hasCache) {
+            return true;
+          }
+          
+          if (data.data.status === 'error') {
+            throw new Error(data.data.message || '转码失败');
+          }
+          
+          if (data.data.status === 'transcoding') {
+            document.getElementById('playerTitle').textContent = filename + ` (转码中 ${data.data.progress}%)`;
+          }
+          
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (err) {
+          throw err;
+        }
+      }
+    }
+
+    async function playMusicWithCache(filePath, filename) {
+      closePlayer();
+      currentFilePath = filePath;
+      currentFilename = filename;
+      
+      document.getElementById('playerTitle').textContent = filename;
+      document.getElementById('playerBar').classList.add('active');
+      
+      if (!audio) initPlayer();
+      
+      try {
+        const audioUrl = `/song/file-cache?path=${encodeURIComponent(filePath)}`;
+        const res = await fetch(audioUrl);
+        
+        if (res.status === 202) {
+          const data = await res.json();
+          await waitForTranscode(filePath, filename);
+          
+          const cacheUrl = `/song/file-cache?path=${encodeURIComponent(filePath)}`;
+          audio.src = cacheUrl;
+          await audio.play();
+          isPlaying = true;
+          document.getElementById('playerTitle').textContent = filename;
+          document.getElementById('playerPlayBtn').textContent = '⏸';
+          document.getElementById('playerPlayBtn').classList.add('player-btn-pause');
+        } else if (res.ok) {
+          audio.src = audioUrl;
+          await audio.play();
+          isPlaying = true;
+          document.getElementById('playerPlayBtn').textContent = '⏸';
+          document.getElementById('playerPlayBtn').classList.add('player-btn-pause');
+        } else {
+          throw new Error('加载失败');
+        }
+      } catch (err) {
+        alert('播放失败: ' + err.message);
+        closePlayer();
+      }
+    }
+
+    async function playWithNativeAudio(filePath, filename) {
+      if (!audio) initPlayer();
+      
+      const audioUrl = `/song/file?path=${encodeURIComponent(filePath)}`;
+      audio.src = audioUrl;
+      
+      audio.play().then(() => {
+        isPlaying = true;
+        document.getElementById('playerPlayBtn').textContent = '⏸';
+        document.getElementById('playerPlayBtn').classList.add('player-btn-pause');
+      }).catch(err => {
+        alert('播放失败: ' + err.message);
+      });
+    }
+
+    function togglePlay() {
+      if (avbridgePlayer) {
+        if (isPlaying) {
+          avbridgePlayer.pause();
+        } else {
+          avbridgePlayer.play();
+        }
+        return;
+      }
+      
+      if (!audio) return;
+      
+      if (isPlaying) {
+        audio.pause();
+        isPlaying = false;
+        document.getElementById('playerPlayBtn').textContent = '▶';
+        document.getElementById('playerPlayBtn').classList.remove('player-btn-pause');
+      } else {
+        audio.play().then(() => {
+          isPlaying = true;
+          document.getElementById('playerPlayBtn').textContent = '⏸';
+          document.getElementById('playerPlayBtn').classList.add('player-btn-pause');
+        }).catch(err => {
+          alert('播放失败: ' + err.message);
+        });
+      }
+    }
+
+    function seekTo() {
+      const progress = document.getElementById('playerProgress').value;
+      
+      if (avbridgePlayer && avbridgePlayer.duration) {
+        const time = (progress / 100) * avbridgePlayer.duration;
+        avbridgePlayer.currentTime = time;
+        return;
+      }
+      
+      if (!audio || !audio.duration) return;
+      
+      const time = (progress / 100) * audio.duration;
+      audio.currentTime = time;
+    }
+
+    function updateProgress() {
+      if (!audio || !audio.duration) return;
+      
+      const progress = (audio.currentTime / audio.duration) * 100;
+      document.getElementById('playerProgress').value = progress;
+      document.getElementById('playerCurrentTime').textContent = formatTime(audio.currentTime);
+    }
+
+    function updateDuration() {
+      if (audio && audio.duration) {
+        document.getElementById('playerTotalTime').textContent = formatTime(audio.duration);
+      }
+    }
+
+    function onAudioEnded() {
+      isPlaying = false;
+      document.getElementById('playerPlayBtn').textContent = '▶';
+      document.getElementById('playerPlayBtn').classList.remove('player-btn-pause');
+      document.getElementById('playerProgress').value = 0;
+    }
+
+    let errorHandled = false;
+
+    function onAudioError(e) {
+      if (errorHandled) return;
+      errorHandled = true;
+      console.log('播放错误: 无法加载音频文件');
+      closePlayer();
+    }
+
+    function closePlayer() {
+      if (avbridgePlayer) {
+        avbridgePlayer.pause();
+        avbridgePlayer.remove();
+        avbridgePlayer = null;
+      }
+      
+      if (audio) {
+        audio.pause();
+        audio.removeAttribute('src');
+        audio.load();
+      }
+      
+      isPlaying = false;
+      errorHandled = false;
+      currentFilePath = '';
+      currentFilename = '';
+      document.getElementById('playerBar').classList.remove('active');
+      document.getElementById('playerPlayBtn').textContent = '▶';
+      document.getElementById('playerPlayBtn').classList.remove('player-btn-pause');
+      document.getElementById('playerProgress').value = 0;
+      document.getElementById('playerCurrentTime').textContent = '00:00';
+      document.getElementById('playerTotalTime').textContent = '00:00';
+    }
+
+    // 格式化时间
+    function formatTime(seconds) {
+      if (!seconds || seconds < 0) return '00:00';
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
 
     function handleSearchInput(e) {
       if (isComposing) return;
@@ -268,16 +840,33 @@
           if (data.data.length === 0) {
             resultDiv.innerHTML = '<div class="empty">没有找到匹配的文件</div>';
           } else {
+            const isMobile = window.innerWidth < 768;
             resultDiv.innerHTML = data.data.map(item => `
               <div class="list-item">
-                <div class="item-info">
+                <div class="item-info" onclick="handleTap('${escapeHtml(item.path)}', '${escapeHtml(item.filename)}')">
                   <div class="name">${escapeHtml(item.filename)}</div>
-                  <div class="path">${escapeHtml(item.path)}</div>
+                  <div class="path" style="word-break:break-all;white-space:normal;font-size:11px;color:#888;">${escapeHtml(item.path)}</div>
                 </div>
-                <div class="item-actions">
-                  <button class="btn btn-warning" onclick="showRenameModal('${escapeHtml(item.filename)}', '${escapeHtml(item.path)}')">重命名</button>
-                  <button class="btn btn-danger" onclick="deleteFile('${escapeHtml(item.path)}')">删除</button>
-                </div>
+                ${isMobile ? `
+                  <select class="mobile-actions" onchange="handleMobileAction(this, '${escapeHtml(item.path)}', '${escapeHtml(item.filename)}')">
+                    <option value="">操作</option>
+                    <option value="play">播放</option>
+                    <option value="link">${selectedLinkSource && selectedLinkSource.path === item.path ? '取消链接' : '链接'}</option>
+                    ${selectedLinkSource && selectedLinkSource.path !== item.path ? `<option value="linkTo">目标</option>` : ''}
+                    <option value="rename">重命名</option>
+                    <option value="delete">删除</option>
+                  </select>
+                ` : `
+                  <div class="item-actions">
+                    <button class="btn btn-play" onclick="playMusic('${escapeHtml(item.path)}', '${escapeHtml(item.filename)}')">播放</button>
+                    ${selectedLinkSource && selectedLinkSource.path !== item.path ?
+                      `<button class="btn btn-link" onclick="createHardLink('${escapeHtml(selectedLinkSource.path)}', '${escapeHtml(item.path)}', '${escapeHtml(item.filename)}')">目标</button>` :
+                      `<button class="btn btn-info" onclick="handleLinkClick(event, '${escapeHtml(item.path)}', '${escapeHtml(item.filename)}')">${selectedLinkSource && selectedLinkSource.path === item.path ? '取消' : '链接'}</button>`
+                    }
+                    <button class="btn btn-warning" onclick="showRenameModal('${escapeHtml(item.filename)}', '${escapeHtml(item.path)}')">重命名</button>
+                    <button class="btn btn-danger" onclick="deleteFile('${escapeHtml(item.path)}')">删除</button>
+                  </div>
+                `}
               </div>
             `).join('');
           }
@@ -334,12 +923,13 @@
             listDiv.innerHTML = '<div class="empty">目录为空</div>';
           } else {
             listDiv.innerHTML = data.data.map(item => `
-              <div class="dir-item ${item.isDirectory ? 'folder' : 'file'}" onclick="${item.isDirectory ? `loadDir('${escapeHtml(item.path)}')` : ''}">
+              <div class="dir-item ${item.isDirectory ? 'folder' : 'file'}" onclick="${item.isDirectory ? `loadDir('${escapeHtml(item.path)}')` : `handleTap('${escapeHtml(item.path)}', '${escapeHtml(item.name)}')`}">
                 <div class="item-info">
                   <div class="name">${escapeHtml(item.name)}</div>
                   <div class="path">${escapeHtml(item.path)}</div>
                 </div>
                 <div class="item-actions">
+                  ${!item.isDirectory ? `<button class="btn btn-play" onclick="event.stopPropagation(); playMusic('${escapeHtml(item.path)}', '${escapeHtml(item.name)}')">播放</button>` : ''}
                   <button class="btn btn-warning" onclick="event.stopPropagation(); showRenameModal('${escapeHtml(item.name)}', '${escapeHtml(item.path)}')">重命名</button>
                   <button class="btn btn-danger" onclick="event.stopPropagation(); deleteFile('${escapeHtml(item.path)}')">删除</button>
                 </div>
@@ -432,10 +1022,48 @@
       }
     }
 
+    function showNewFolderModal() {
+      const input = document.getElementById('newFolderNameInput');
+      input.value = '';
+      input.focus();
+      document.getElementById('newFolderModal').classList.add('active');
+    }
+
+    function closeNewFolderModal() {
+      document.getElementById('newFolderModal').classList.remove('active');
+      document.getElementById('newFolderNameInput').value = '';
+    }
+
+    async function createNewFolder() {
+      const name = document.getElementById('newFolderNameInput').value.trim();
+      if (!name) {
+        alert('请输入文件夹名称');
+        return;
+      }
+      try {
+        const res = await fetch('/song/mkdir', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dir: currentDir, name })
+        });
+        const data = await res.json();
+        if (data.success) {
+          closeNewFolderModal();
+          loadDir(currentDir);
+        } else {
+          alert('创建失败: ' + data.message);
+        }
+      } catch (err) {
+        alert('创建失败: ' + err.message);
+      }
+    }
+
     function escapeHtml(str) {
       return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
     }
 
+    // 初始化
+    initPlayer();
     loadDir();
   </script>
 </body>

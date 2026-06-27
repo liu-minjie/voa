@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const config = require('../config');
 const dataPath = config.dataPath;
+const ffmpeg = require('fluent-ffmpeg');
 
 const musicPath = path.resolve(__dirname, '../../../music');
 
@@ -28,6 +29,143 @@ const writeFileSync = (filePath, data) => {
 
 router.get('/', function(req, res) {
   res.sendFile(path.join(__dirname, '../views/song_admin.html'));
+});
+
+const crypto = require('crypto');
+const transcodeStatus = {};
+
+function getCachePath(filePath) {
+  const hash = crypto.createHash('md5').update(filePath).digest('hex');
+  return path.join(dataPath, 'cache', 'audio', `${hash}.mp3`);
+}
+
+function ensureCacheDir() {
+  const cacheDir = path.join(dataPath, 'cache', 'audio');
+  if (!fs.existsSync(cacheDir)) {
+    fs.mkdirSync(cacheDir, { recursive: true });
+  }
+}
+
+function transcodeToCache(inputPath, cachePath, key) {
+  transcodeStatus[key] = { status: 'transcoding', progress: 0 };
+  ffmpeg(inputPath)
+    .audioCodec('libmp3lame')
+    .audioBitrate(192)
+    .format('mp3')
+    .on('progress', (progress) => {
+      if (progress.percent) {
+        transcodeStatus[key].progress = Math.round(progress.percent);
+      }
+    })
+    .on('error', (err) => {
+      console.error('FFmpeg transcode error:', err);
+      transcodeStatus[key] = { status: 'error', message: err.message };
+    })
+    .on('end', () => {
+      console.log('Transcode completed:', cachePath);
+      transcodeStatus[key] = { status: 'completed', progress: 100 };
+    })
+    .save(cachePath);
+}
+
+router.get('/transcode-status', function(req, res) {
+  const filePath = req.query.path;
+  if (!filePath) {
+    return res.status(400).json({ success: false, message: '缺少路径参数' });
+  }
+
+  const key = crypto.createHash('md5').update(filePath).digest('hex');
+  const status = transcodeStatus[key];
+  
+  res.json({
+    success: true,
+    data: status || { status: 'unknown' },
+    hasCache: fs.existsSync(getCachePath(filePath))
+  });
+});
+
+router.get('/file-cache', function(req, res) {
+  const filePath = req.query.path;
+  
+  if (!filePath) {
+    return res.status(400).json({ success: false, message: '缺少路径参数' });
+  }
+
+  const fullPath = path.join(musicPath, filePath);
+  
+  if (!fs.existsSync(fullPath)) {
+    return res.status(404).json({ success: false, message: '文件不存在' });
+  }
+
+  const resolvedPath = path.resolve(fullPath);
+  if (!resolvedPath.startsWith(musicPath)) {
+    return res.status(403).json({ success: false, message: '非法路径' });
+  }
+
+  const cachePath = getCachePath(filePath);
+  const key = crypto.createHash('md5').update(filePath).digest('hex');
+  ensureCacheDir();
+
+  if (!fs.existsSync(cachePath)) {
+    if (transcodeStatus[key] && transcodeStatus[key].status === 'transcoding') {
+      return res.status(202).json({ success: false, message: '转码中，请等待', status: 'transcoding', progress: transcodeStatus[key].progress });
+    }
+
+    transcodeToCache(resolvedPath, cachePath, key);
+    return res.status(202).json({ success: false, message: '开始转码', status: 'starting', progress: 0 });
+  }
+
+  res.setHeader('Content-Type', 'audio/mpeg');
+  res.sendFile(cachePath);
+});
+
+router.get('/file', function(req, res) {
+  const filePath = req.query.path;
+  const transcode = req.query.transcode === '1';
+  
+  
+  if (!filePath) {
+    return res.status(400).json({ success: false, message: '缺少路径参数' });
+  }
+
+  const fullPath = path.join(musicPath, filePath);
+  
+  if (!fs.existsSync(fullPath)) {
+    return res.status(404).json({ success: false, message: '文件不存在' });
+  }
+
+  const resolvedPath = path.resolve(fullPath);
+  
+  if (!resolvedPath.startsWith(musicPath)) {
+    return res.status(403).json({ success: false, message: '非法路径' });
+  }
+
+  const ext = path.extname(filePath).toLowerCase();
+  const needTranscode = transcode || ['.ape'].includes(ext);
+
+  if (needTranscode) {
+    res.setHeader('Content-Type', 'audio/mpeg');
+    
+    const ffmpegCommand = ffmpeg(resolvedPath)
+      .audioCodec('libmp3lame')
+      .audioBitrate(192)
+      .format('mp3')
+      .on('start', (commandLine) => {
+      })
+      .on('progress', (progress) => {
+      })
+      .on('error', (err) => {
+        if (!res.headersSent) {
+          res.status(500).json({ success: false, message: '转码失败' });
+        }
+      })
+      .on('end', () => {
+      });
+    
+    ffmpegCommand.pipe(res);
+  } else {
+    res.sendFile(resolvedPath);
+  }
 });
 
 router.get('/search', function(req, res) {
@@ -151,7 +289,6 @@ router.post('/delete', function(req, res) {
 router.get('/dir', function(req, res) {
   const dir = req.query.dir || '';
   const fullPath = path.join(musicPath, dir);
-  console.log(fullPath)
 
   try {
     if (!fs.existsSync(fullPath)) {
@@ -241,6 +378,58 @@ router.post('/delete-file', function(req, res) {
     } else {
       fs.unlinkSync(fullPath);
     }
+
+    res.json({ success: true });
+  } catch (err) {
+    res.json({ success: false, message: err.message });
+  }
+});
+
+router.post('/mkdir', function(req, res) {
+  try {
+    const { dir, name } = req.body;
+    if (!name) {
+      return res.json({ success: false, message: '缺少目录名参数' });
+    }
+
+    const parentPath = dir ? path.join(musicPath, dir) : musicPath;
+    const newDirPath = path.join(parentPath, name);
+
+    if (fs.existsSync(newDirPath)) {
+      return res.json({ success: false, message: '目录已存在' });
+    }
+
+    fs.mkdirSync(newDirPath, { recursive: true });
+
+    res.json({ success: true });
+  } catch (err) {
+    res.json({ success: false, message: err.message });
+  }
+});
+
+router.post('/link', function(req, res) {
+  try {
+    const { sourcePath, targetPath, targetFilename } = req.body;
+    
+    if (!sourcePath || !targetPath || !targetFilename) {
+      return res.json({ success: false, message: '缺少参数' });
+    }
+
+    const sourceFullPath = path.join(musicPath, sourcePath);
+    const targetFullPath = path.join(musicPath, targetPath);
+    const sourceDir = path.dirname(sourceFullPath);
+    const newLinkPath = path.join(sourceDir, targetFilename);
+
+    if (!fs.existsSync(sourceFullPath)) {
+      return res.json({ success: false, message: '源文件不存在' });
+    }
+
+    if (!fs.existsSync(targetFullPath)) {
+      return res.json({ success: false, message: '目标文件不存在' });
+    }
+
+    fs.unlinkSync(sourceFullPath);
+    fs.linkSync(targetFullPath, newLinkPath);
 
     res.json({ success: true });
   } catch (err) {
