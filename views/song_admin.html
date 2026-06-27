@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>音乐管理</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+      padding: 0;
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .section {
+      background: white;
+      border-bottom: 1px solid #eee;
+      flex-shrink: 0;
+    }
+    .section:last-child {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .section-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid #f0f0f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #fff;
+    }
+    .section-header h2 { font-size: 15px; font-weight: 600; color: #333; }
+    .search-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 12px 16px;
+      background: #fff;
+    }
+    .search-bar input {
+      flex: 1;
+      min-width: 200px;
+      padding: 11px 14px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 15px;
+      outline: none;
+      -webkit-appearance: none;
+    }
+    .search-bar input:focus { border-color: #4CAF50; }
+    .search-bar button {
+      padding: 11px 18px;
+      border: none;
+      border-radius: 6px;
+      background: #4CAF50;
+      color: white;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      min-width: 70px;
+      -webkit-appearance: none;
+    }
+    .search-bar button:active { opacity: 0.8; }
+    .list-container {
+      flex: 1;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .list-item {
+      padding: 14px 16px;
+      border-bottom: 1px solid #f5f5f5;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #fff;
+    }
+    .list-item:active { background: #f9f9f9; }
+    .list-item:last-child { border-bottom: none; }
+    .item-info { flex: 1; min-width: 0; margin-right: 12px; }
+    .item-info .name {
+      font-size: 15px;
+      color: #333;
+      margin-bottom: 3px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 500;
+    }
+    .item-info .path {
+      font-size: 12px;
+      color: #999;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .item-actions { display: flex; gap: 6px; }
+    .btn {
+      padding: 6px 10px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      min-width: 50px;
+      text-align: center;
+      -webkit-appearance: none;
+    }
+    .btn:active { opacity: 0.8; }
+    .btn-primary { background: #4CAF50; color: white; }
+    .btn-warning { background: #ff9800; color: white; }
+    .btn-danger { background: #f44336; color: white; }
+    .dir-nav {
+      padding: 10px 16px;
+      background: #fafafa;
+      border-bottom: 1px solid #eee;
+      font-size: 13px;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    .dir-nav a { color: #4CAF50; text-decoration: none; margin-right: 4px; }
+    .dir-nav a:active { text-decoration: underline; }
+    .dir-item {
+      padding: 14px 16px;
+      border-bottom: 1px solid #f5f5f5;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #fff;
+    }
+    .dir-item:active { background: #f9f9f9; }
+    .dir-item.folder .name::before { content: '📁 '; }
+    .dir-item.file .name::before { content: '🎵 '; }
+    .empty { padding: 60px 20px; text-align: center; color: #999; font-size: 14px; }
+    .loading { padding: 20px; text-align: center; color: #999; font-size: 14px; }
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      justify-content: center;
+      align-items: flex-end;
+      z-index: 1000;
+    }
+    .modal.active { display: flex; }
+    .modal-content {
+      background: white;
+      padding: 20px;
+      border-radius: 16px 16px 0 0;
+      width: 100%;
+      max-width: 400px;
+      animation: slideUp 0.3s ease;
+    }
+    @keyframes slideUp {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
+    }
+    .modal-content h3 { margin-bottom: 15px; font-size: 16px; font-weight: 600; }
+    .modal-content input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      font-size: 15px;
+      outline: none;
+      -webkit-appearance: none;
+    }
+    .modal-content input:focus { border-color: #4CAF50; }
+    .modal-actions { display: flex; gap: 10px; }
+    .modal-actions .btn {
+      flex: 1;
+      padding: 12px;
+      font-size: 15px;
+      border-radius: 6px;
+    }
+    .modal-actions .btn-cancel { background: #f5f5f5; color: #666; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="section">
+      <div class="section-header">
+        <h2>搜索音乐</h2>
+      </div>
+      <div class="search-bar">
+        <input type="text" id="searchInput" placeholder="输入文件名搜索..." oninput="handleSearchInput(event)" oncompositionstart="isComposing=true" oncompositionend="handleSearchEnd()">
+        <button onclick="addSong()">添加</button>
+      </div>
+      <div class="list-container" id="searchResult">
+        <div class="empty">输入关键词搜索音乐文件</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <h2>目录浏览</h2>
+      </div>
+      <div class="dir-nav" id="dirNav">/</div>
+      <div class="list-container" id="dirList">
+        <div class="loading">加载中...</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="renameModal">
+    <div class="modal-content">
+      <h3 id="modalTitle">重命名</h3>
+      <input type="text" id="newNameInput" placeholder="输入新名称" autocomplete="off">
+      <div class="modal-actions">
+        <button class="btn btn-cancel" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="confirmRename()">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let searchResults = [];
+    let currentDir = '';
+    let renamePath = '';
+    let searchTimer = null;
+    let isComposing = false;
+
+    function handleSearchInput(e) {
+      if (isComposing) return;
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        searchMusic();
+      }, 800);
+    }
+
+    function handleSearchEnd() {
+      isComposing = false;
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        searchMusic();
+      }, 300);
+    }
+
+    async function searchMusic() {
+      const keyword = document.getElementById('searchInput').value.trim();
+      const resultDiv = document.getElementById('searchResult');
+      
+      if (!keyword) {
+        resultDiv.innerHTML = '<div class="empty">输入关键词搜索音乐文件</div>';
+        searchResults = [];
+        return;
+      }
+
+      resultDiv.innerHTML = '<div class="loading">搜索中...</div>';
+
+      try {
+        const res = await fetch(`/song/search?keyword=${encodeURIComponent(keyword)}`);
+        const data = await res.json();
+
+        if (data.success) {
+          searchResults = data.data;
+          if (data.data.length === 0) {
+            resultDiv.innerHTML = '<div class="empty">没有找到匹配的文件</div>';
+          } else {
+            resultDiv.innerHTML = data.data.map(item => `
+              <div class="list-item">
+                <div class="item-info">
+                  <div class="name">${escapeHtml(item.filename)}</div>
+                  <div class="path">${escapeHtml(item.path)}</div>
+                </div>
+                <div class="item-actions">
+                  <button class="btn btn-warning" onclick="showRenameModal('${escapeHtml(item.filename)}', '${escapeHtml(item.path)}')">重命名</button>
+                  <button class="btn btn-danger" onclick="deleteFile('${escapeHtml(item.path)}')">删除</button>
+                </div>
+              </div>
+            `).join('');
+          }
+        } else {
+          resultDiv.innerHTML = '<div class="empty">搜索失败: ' + data.message + '</div>';
+        }
+      } catch (err) {
+        resultDiv.innerHTML = '<div class="empty">搜索失败: ' + err.message + '</div>';
+      }
+    }
+
+    async function addToSongList(filename) {
+      try {
+        const res = await fetch('/song/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('添加成功！');
+        } else {
+          alert('添加失败: ' + data.message);
+        }
+      } catch (err) {
+        alert('添加失败: ' + err.message);
+      }
+    }
+
+    function addSong() {
+      const filename = document.getElementById('searchInput').value.trim();
+      if (!filename) {
+        alert('请输入文件名');
+        return;
+      }
+      addToSongList(filename);
+    }
+
+    async function loadDir(dir = '') {
+      const listDiv = document.getElementById('dirList');
+      const navDiv = document.getElementById('dirNav');
+      
+      listDiv.innerHTML = '<div class="loading">加载中...</div>';
+
+      try {
+        const res = await fetch(`/song/dir?dir=${encodeURIComponent(dir)}`);
+        const data = await res.json();
+
+        if (data.success) {
+          currentDir = data.currentDir;
+          navDiv.innerHTML = buildDirNav(data.currentDir);
+
+          if (data.data.length === 0) {
+            listDiv.innerHTML = '<div class="empty">目录为空</div>';
+          } else {
+            listDiv.innerHTML = data.data.map(item => `
+              <div class="dir-item ${item.isDirectory ? 'folder' : 'file'}" onclick="${item.isDirectory ? `loadDir('${escapeHtml(item.path)}')` : ''}">
+                <div class="item-info">
+                  <div class="name">${escapeHtml(item.name)}</div>
+                  <div class="path">${escapeHtml(item.path)}</div>
+                </div>
+                <div class="item-actions">
+                  <button class="btn btn-warning" onclick="event.stopPropagation(); showRenameModal('${escapeHtml(item.name)}', '${escapeHtml(item.path)}')">重命名</button>
+                  <button class="btn btn-danger" onclick="event.stopPropagation(); deleteFile('${escapeHtml(item.path)}')">删除</button>
+                </div>
+              </div>
+            `).join('');
+          }
+        } else {
+          listDiv.innerHTML = '<div class="empty">加载失败: ' + data.message + '</div>';
+        }
+      } catch (err) {
+        listDiv.innerHTML = '<div class="empty">加载失败: ' + err.message + '</div>';
+      }
+    }
+
+    function buildDirNav(dir) {
+      if (!dir) {
+        return '<a href="#" onclick="loadDir(\'\'); return false;">/</a>';
+      }
+      const parts = dir.split('/');
+      let current = '';
+      let html = '<a href="#" onclick="loadDir(\'\'); return false;">/</a>';
+      for (const part of parts) {
+        if (!part) continue;
+        current = current ? current + '/' + part : part;
+        html += ' / <a href="#" onclick="loadDir(\'' + escapeHtml(current) + '\'); return false;">' + escapeHtml(part) + '</a>';
+      }
+      return html;
+    }
+
+    async function deleteFile(filePath) {
+      if (!confirm('确定要删除这个文件/目录吗？')) {
+        return;
+      }
+      try {
+        const res = await fetch('/song/delete-file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: filePath })
+        });
+        const data = await res.json();
+        if (data.success) {
+          loadDir(currentDir);
+          searchMusic();
+        } else {
+          alert('删除失败: ' + data.message);
+        }
+      } catch (err) {
+        alert('删除失败: ' + err.message);
+      }
+    }
+
+    function showRenameModal(currentName, filePath) {
+      renamePath = filePath;
+      document.getElementById('modalTitle').innerText = '重命名文件';
+      const input = document.getElementById('newNameInput');
+      input.value = currentName;
+      input.focus();
+      input.select();
+      document.getElementById('renameModal').classList.add('active');
+    }
+
+    function closeModal() {
+      document.getElementById('renameModal').classList.remove('active');
+      document.getElementById('newNameInput').value = '';
+      renamePath = '';
+    }
+
+    async function confirmRename() {
+      const newName = document.getElementById('newNameInput').value.trim();
+      if (!newName) {
+        alert('请输入新名称');
+        return;
+      }
+      try {
+        const res = await fetch('/song/rename-file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: renamePath, newName })
+        });
+        const data = await res.json();
+        if (data.success) {
+          closeModal();
+          loadDir(currentDir);
+          searchMusic();
+        } else {
+          alert('重命名失败: ' + data.message);
+        }
+      } catch (err) {
+        alert('重命名失败: ' + err.message);
+      }
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    }
+
+    loadDir();
+  </script>
+</body>
+</html>

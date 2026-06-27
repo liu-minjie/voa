@@ -40,6 +40,126 @@ const ensureDir = (dirPath, folder) => {
   return dir;
 }
 
+// 检查视频是否需要修复 moov 位置（MP4 视频且 moov 在最后）
+function checkAndFixMoov(videoPath) {
+  return new Promise((resolve) => {
+    // 先检查文件是否是 MP4 格式（检查文件魔数）
+    console.log('videoPath', videoPath)
+    const buffer = Buffer.alloc(8);
+    try {
+      const fd = fs.openSync(videoPath, 'r');
+      fs.readSync(fd, buffer, 0, 8, 0);
+      fs.closeSync(fd);
+    } catch (err) {
+      console.log('读取文件失败:', err.message);
+      return resolve(false);
+    }
+
+    // MP4/MOV 文件魔数：第 5-8 字节是 'ftyp'（前 4 字节是 atom 大小）
+    // 正确的 MP4 结构：[4字节: atom大小][4字节: 'ftyp']...
+    const atomSize = buffer.readUInt32BE(0);
+    const magic = buffer.toString('ascii', 4, 8);
+    console.log('atomSize:', atomSize);
+    console.log('magic (ascii):', JSON.stringify(magic));
+    console.log('buffer hex:', buffer.toString('hex'));
+    if (magic !== 'ftyp') {
+      console.log('不是 MP4/MOV 文件，跳过 moov 修复');
+      return resolve(false);
+    }
+
+    // 检查 moov 位置（解析 MP4 atom 结构）
+    // MP4 结构：[4字节: atom大小][4字节: atom类型][atom内容]
+    // moov atom 应该在文件开头附近（通常在 ftyp 之后）
+    const headerBuffer = Buffer.alloc(4096);
+    try {
+      const fd = fs.openSync(videoPath, 'r');
+      fs.readSync(fd, headerBuffer, 0, 4096, 0);
+      fs.closeSync(fd);
+    } catch (err) {
+      console.log('读取文件头部失败:', err.message);
+      return resolve(false);
+    }
+
+    // 解析 atoms，检查 moov 是否在文件开头附近
+    let offset = 0;
+    let foundMoov = false;
+    let foundMdat = false;
+    
+    while (offset < headerBuffer.length - 8) {
+      const size = headerBuffer.readUInt32BE(offset);
+      const type = headerBuffer.toString('ascii', offset + 4, offset + 8);
+      
+      console.log(`发现 atom: ${type}，大小: ${size}，位置: ${offset}`);
+      
+      if (type === 'moov') {
+        foundMoov = true;
+        console.log(`moov atom 位置: ${offset}`);
+        // moov 如果在前 1KB 内，认为是在开头
+        if (offset < 1024) {
+          console.log('moov 已在文件开头，无需处理');
+          return resolve(false);
+        }
+        break;
+      }
+      
+      if (type === 'mdat') {
+        foundMdat = true;
+        console.log('mdat 在 moov 之前，说明 moov 在文件末尾');
+        break;
+      }
+      
+      // 如果 size 是 0 或无效，停止解析
+      if (size < 8) break;
+      
+      offset += size;
+    }
+    
+    // 如果没有找到 moov，或者 mdat 在前面，说明 moov 在末尾
+    if (!foundMoov || foundMdat) {
+      console.log('检测到 moov 在文件末尾，开始修复...');
+    } else {
+      console.log('moov 已在文件开头，无需处理');
+      return resolve(false);
+    }
+
+    // 执行 faststart 处理，将 moov 移到文件开头
+    const tempPath = videoPath + '.temp';
+    
+    ffmpeg(videoPath)
+      .outputOptions([
+        '-movflags +faststart',
+        '-c:v copy',
+        '-c:a copy'
+      ])
+      .output(tempPath)
+      .on('end', () => {
+        try {
+          // 替换原文件
+          fs.unlinkSync(videoPath);
+          fs.renameSync(tempPath, videoPath);
+          console.log('moov 修复完成');
+          resolve(true);
+        } catch (e) {
+          console.log('moov 修复失败:', e.message);
+          // 清理临时文件
+          if (fs.existsSync(tempPath)) {
+            fs.unlinkSync(tempPath);
+          }
+          resolve(false);
+        }
+      })
+      .on('error', (err) => {
+        console.log('moov 修复失败:', err.message);
+        // 清理临时文件
+        if (fs.existsSync(tempPath)) {
+          fs.unlinkSync(tempPath);
+        }
+        resolve(false);
+      })
+      .run();
+  });
+}
+
 
 ensureJson('./baseinfo.json', []);
 ensureJson('./image.json', []);
@@ -1098,6 +1218,41 @@ router.post('/video/delete', function(req, res) {
     success = false;
     message = err.message;
     log.error(err, '/video/delete');
+    res.json({ success: false, message });
+  }
+});
+
+// 修复视频 moov 位置
+router.post('/video/fix-moov', function(req, res) {
+  crossDomain(req, res);
+  let success = true;
+  let message = '';
+  
+  try {
+    const { filename } = req.body;
+    
+    if (!filename) {
+      return res.json({ success: false, message: '缺少文件名' });
+    }
+    
+    const videoPath = path.join(dataPath, 'upload/video', filename);
+    
+    if (!fs.existsSync(videoPath)) {
+      return res.json({ success: false, message: '视频文件不存在' });
+    }
+    
+    // 使用 checkAndFixMoov 函数处理
+    checkAndFixMoov(videoPath).then(fixed => {
+      if (fixed) {
+        res.json({ success: true, message: 'moov 修复成功' });
+      } else {
+        res.json({ success: true, message: 'moov 无需修复或修复失败' });
+      }
+    });
+  } catch (err) {
+    success = false;
+    message = err.message;
+    log.error(err, '/video/fix-moov');
     res.json({ success: false, message });
   }
 });

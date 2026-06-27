@@ -59,6 +59,7 @@ const routes = require('./routes/index');
 //page
 app.use('/baby', require('./routes/baby'))
 app.use('/voa', require('./routes/voa'))
+app.use('/song', require('./routes/song'))
 app.use('/', routes);
 
 

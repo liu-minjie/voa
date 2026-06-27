@@ -479,6 +479,7 @@
               <div class="video-actions">
                 <button class="btn btn-primary" onclick="playVideo('${video.name}')">▶ 播放</button>
                 <button class="btn" onclick="generateThumbnail('${video.name}')">🖼️ 生成缩略图</button>
+                <button class="btn" onclick="fixMoov('${video.name}')">🔧 修复 moov</button>
                 <button class="btn btn-warning" onclick="compressVideo('${video.name}')" ${video.size < 10 * 1024 * 1024 ? 'disabled title="文件太小，无需压缩"' : ''}>🗜️ 压缩</button>
                 <button class="btn btn-danger" onclick="deleteVideo('${video.name}', ${video.id})">🗑️ 删除</button>
               </div>
@@ -532,6 +533,35 @@
       } catch (err) {
         console.error('生成缩略图失败:', err);
         alert('生成缩略图失败：' + err.message);
+      } finally {
+        hideLoading();
+      }
+    }
+
+    async function fixMoov(filename) {
+      if (!confirm(`确定要修复视频 "${filename}" 的 moov 信息吗？\n\n这将把 moov atom 移到文件开头，改善播放加载速度。`)) {
+        return;
+      }
+      
+      showLoading('正在修复 moov 信息...');
+      
+      try {
+        const res = await fetch(`/baby/video/fix-moov`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          alert('moov 修复完成！' + (data.message || ''));
+        } else {
+          alert('moov 修复失败：' + data.message);
+        }
+      } catch (err) {
+        console.error('修复 moov 失败:', err);
+        alert('修复 moov 失败：' + err.message);
       } finally {
         hideLoading();
       }
