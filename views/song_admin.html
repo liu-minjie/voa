@@ -843,7 +843,7 @@
             const isMobile = window.innerWidth < 768;
             resultDiv.innerHTML = data.data.map(item => `
               <div class="list-item">
-                <div class="item-info" onclick="handleTap('${escapeHtml(item.path)}', '${escapeHtml(item.filename)}')">
+                <div class="item-info" onclick="playMusic('${escapeHtml(item.path)}', '${escapeHtml(item.filename)}')">
                   <div class="name">${escapeHtml(item.filename)}</div>
                   <div class="path" style="word-break:break-all;white-space:normal;font-size:11px;color:#888;">${escapeHtml(item.path)}</div>
                 </div>
