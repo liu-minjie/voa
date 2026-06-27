@@ -46,8 +46,6 @@
       background: #fff;
     }
     .search-bar input {
-      flex: 1;
-      min-width: 200px;
       padding: 11px 14px;
       border: 1px solid #ddd;
       border-radius: 6px;
@@ -69,6 +67,54 @@
       -webkit-appearance: none;
     }
     .search-bar button:active { opacity: 0.8; }
+    .search-input-wrapper {
+      position: relative;
+      flex: 1;
+      min-width: 200px;
+      display: flex;
+    }
+    .search-input-wrapper input {
+      flex: 1;
+      padding-right: 36px;
+    }
+    .search-clear {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 20px;
+      height: 20px;
+      border: none;
+      background: #ccc;
+      color: white;
+      border-radius: 50%;
+      font-size: 12px;
+      cursor: pointer;
+      display: none;
+      line-height: 18px;
+      text-align: center;
+      padding: 0;
+      z-index: 1;
+      -webkit-appearance: none;
+    }
+    .search-clear.show { display: block; }
+    .toast {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #333;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 6px;
+      font-size: 14px;
+      z-index: 10001;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      pointer-events: none;
+    }
+    @keyframes toastFadeIn { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+    @keyframes toastFadeOut { from { opacity: 1; transform: translateX(-50%) translateY(0); } to { opacity: 0; transform: translateX(-50%) translateY(-10px); } }
     .list-container {
       flex: 1;
       overflow-y: auto;
@@ -287,11 +333,11 @@
 <body>
   <div class="container">
     <div class="section">
-      <div class="section-header">
-        <h2>搜索音乐</h2>
-      </div>
       <div class="search-bar">
-        <input type="text" id="searchInput" placeholder="输入文件名搜索..." oninput="handleSearchInput(event)" oncompositionstart="isComposing=true" oncompositionend="handleSearchEnd()">
+        <div class="search-input-wrapper">
+          <input type="text" id="searchInput" placeholder="输入文件名搜索..." oninput="handleSearchInput(event)" oncompositionstart="isComposing=true" oncompositionend="handleSearchEnd()">
+          <span class="search-clear" id="searchClear" onclick="clearSearch()">×</span>
+        </div>
         <button onclick="addSong()">添加</button>
       </div>
       <div class="list-container" id="searchResult">
@@ -300,11 +346,11 @@
     </div>
 
     <div class="section">
-      <div class="section-header">
-        <h2>目录浏览</h2>
-        <button class="btn btn-primary btn-sm" onclick="showNewFolderModal()">新建文件夹</button>
+      <div style="padding-right: 20px; position: relative;"> 
+        <div class="dir-nav" id="dirNav">/</div>
+        <span style="position: absolute; top: 5px; right: 5px;background: #4CAF50; color: white; padding: 2px 6px; border-radius: 4px; cursor: pointer;"  onclick="showNewFolderModal()">+</span>
       </div>
-      <div class="dir-nav" id="dirNav">/</div>
+      
       <div class="list-container" id="dirList">
         <div class="loading">加载中...</div>
       </div>
@@ -429,14 +475,14 @@
         });
         const data = await res.json();
         if (data.success) {
-          alert('硬链接创建成功！');
+          showToast('硬链接创建成功！');
           selectedLinkSource = null;
           searchMusic();
         } else {
-          alert('创建失败: ' + data.message);
+          showToast('创建失败: ' + data.message);
         }
       } catch (err) {
-        alert('创建失败: ' + err.message);
+        showToast('创建失败: ' + err.message);
       }
     }
 
@@ -582,7 +628,7 @@
           if (avbridgeErrorHandled) return;
           avbridgeErrorHandled = true;
           console.error('[avbridge] error event:', e);
-          alert('播放错误: avbridge 无法加载文件');
+          showToast('播放错误: avbridge 无法加载文件');
           closePlayer();
         });
         
@@ -595,7 +641,7 @@
         }
       } catch (err) {
         console.error('[avbridge] playWithAvbridge error:', err);
-        alert('播放失败: ' + err.message);
+        showToast('播放失败: ' + err.message);
       }
     }
 
@@ -610,7 +656,7 @@
         document.getElementById('playerPlayBtn').textContent = '⏸';
         document.getElementById('playerPlayBtn').classList.add('player-btn-pause');
       }).catch(err => {
-        alert('播放失败: ' + err.message);
+        showToast('播放失败: ' + err.message);
       });
     }
 
@@ -677,7 +723,7 @@
           throw new Error('加载失败');
         }
       } catch (err) {
-        alert('播放失败: ' + err.message);
+        showToast('播放失败: ' + err.message);
         closePlayer();
       }
     }
@@ -693,7 +739,7 @@
         document.getElementById('playerPlayBtn').textContent = '⏸';
         document.getElementById('playerPlayBtn').classList.add('player-btn-pause');
       }).catch(err => {
-        alert('播放失败: ' + err.message);
+        showToast('播放失败: ' + err.message);
       });
     }
 
@@ -720,7 +766,7 @@
           document.getElementById('playerPlayBtn').textContent = '⏸';
           document.getElementById('playerPlayBtn').classList.add('player-btn-pause');
         }).catch(err => {
-          alert('播放失败: ' + err.message);
+          showToast('播放失败: ' + err.message);
         });
       }
     }
@@ -803,7 +849,43 @@
       return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
 
+    function showToast(message, duration = 2000) {
+      let toast = document.getElementById('toast');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'toast';
+        toast.className = 'toast';
+        document.body.appendChild(toast);
+      }
+      toast.textContent = message;
+      toast.style.animation = 'toastFadeIn 0.3s ease forwards';
+      setTimeout(() => {
+        toast.style.animation = 'toastFadeOut 0.3s ease forwards';
+        setTimeout(() => toast.style.opacity = '0', 300);
+      }, duration);
+    }
+
+    function formatFileSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+      return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+    }
+
+    function clearSearch() {
+      document.getElementById('searchInput').value = '';
+      document.getElementById('searchClear').classList.remove('show');
+      document.getElementById('searchResult').innerHTML = '<div class="empty">输入关键词搜索音乐文件</div>';
+      searchResults = [];
+    }
+
     function handleSearchInput(e) {
+      const clearBtn = document.getElementById('searchClear');
+      if (e.target.value) {
+        clearBtn.classList.add('show');
+      } else {
+        clearBtn.classList.remove('show');
+      }
       if (isComposing) return;
       clearTimeout(searchTimer);
       searchTimer = setTimeout(() => {
@@ -844,7 +926,7 @@
             resultDiv.innerHTML = data.data.map(item => `
               <div class="list-item">
                 <div class="item-info" onclick="playMusic('${escapeHtml(item.path)}', '${escapeHtml(item.filename)}')">
-                  <div class="name">${escapeHtml(item.filename)}</div>
+                  <div class="name">${escapeHtml(item.filename)} <span style="font-size:11px;color:#999;font-weight:normal;">(${formatFileSize(item.size)})</span></div>
                   <div class="path" style="word-break:break-all;white-space:normal;font-size:11px;color:#888;">${escapeHtml(item.path)}</div>
                 </div>
                 ${isMobile ? `
@@ -887,19 +969,19 @@
         });
         const data = await res.json();
         if (data.success) {
-          alert('添加成功！');
+          showToast('添加成功！');
         } else {
-          alert('添加失败: ' + data.message);
+          showToast('添加失败: ' + data.message);
         }
       } catch (err) {
-        alert('添加失败: ' + err.message);
+        showToast('添加失败: ' + err.message);
       }
     }
 
     function addSong() {
       const filename = document.getElementById('searchInput').value.trim();
       if (!filename) {
-        alert('请输入文件名');
+        showToast('请输入文件名');
         return;
       }
       addToSongList(filename);
@@ -974,10 +1056,10 @@
           loadDir(currentDir);
           searchMusic();
         } else {
-          alert('删除失败: ' + data.message);
+          showToast('删除失败: ' + data.message);
         }
       } catch (err) {
-        alert('删除失败: ' + err.message);
+        showToast('删除失败: ' + err.message);
       }
     }
 
@@ -1000,7 +1082,7 @@
     async function confirmRename() {
       const newName = document.getElementById('newNameInput').value.trim();
       if (!newName) {
-        alert('请输入新名称');
+        showToast('请输入新名称');
         return;
       }
       try {
@@ -1015,10 +1097,10 @@
           loadDir(currentDir);
           searchMusic();
         } else {
-          alert('重命名失败: ' + data.message);
+          showToast('重命名失败: ' + data.message);
         }
       } catch (err) {
-        alert('重命名失败: ' + err.message);
+        showToast('重命名失败: ' + err.message);
       }
     }
 
@@ -1037,7 +1119,7 @@
     async function createNewFolder() {
       const name = document.getElementById('newFolderNameInput').value.trim();
       if (!name) {
-        alert('请输入文件夹名称');
+        showToast('请输入文件夹名称');
         return;
       }
       try {
@@ -1051,10 +1133,10 @@
           closeNewFolderModal();
           loadDir(currentDir);
         } else {
-          alert('创建失败: ' + data.message);
+          showToast('创建失败: ' + data.message);
         }
       } catch (err) {
-        alert('创建失败: ' + err.message);
+        showToast('创建失败: ' + err.message);
       }
     }
 
