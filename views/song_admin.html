@@ -873,10 +873,12 @@
     }
 
     function clearSearch() {
-      document.getElementById('searchInput').value = '';
+      const input = document.getElementById('searchInput');
+      input.value = '';
       document.getElementById('searchClear').classList.remove('show');
       document.getElementById('searchResult').innerHTML = '<div class="empty">输入关键词搜索音乐文件</div>';
       searchResults = [];
+      input.focus();
     }
 
     function handleSearchInput(e) {
