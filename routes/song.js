@@ -407,6 +407,43 @@ router.post('/mkdir', function(req, res) {
   }
 });
 
+router.post('/symlink', function(req, res) {
+  try {
+    const { source, target } = req.body;
+    if (!source || !target) {
+      return res.json({ success: false, message: '缺少源目录或目标目录参数' });
+    }
+
+    // source 和 target 都是相对 music 的路径
+    // ln -s A B/A：在 target 下创建指向 source 的软链接，链接名为 source 的 basename
+    const sourcePath = path.join(musicPath, source);
+    const targetDir = path.join(musicPath, target);
+    const linkName = path.basename(sourcePath);
+    const linkPath = path.join(targetDir, linkName);
+
+    // 安全检查：防止越界
+    if (!path.resolve(sourcePath).startsWith(musicPath) || !path.resolve(targetDir).startsWith(musicPath)) {
+      return res.json({ success: false, message: '非法路径' });
+    }
+
+    if (!fs.existsSync(sourcePath)) {
+      return res.json({ success: false, message: '源目录不存在' });
+    }
+    if (!fs.existsSync(targetDir)) {
+      return res.json({ success: false, message: '目标目录不存在' });
+    }
+    if (fs.existsSync(linkPath)) {
+      return res.json({ success: false, message: '软链接已存在' });
+    }
+
+    // 使用绝对路径创建软链接，避免相对路径引用混乱
+    fs.symlinkSync(path.resolve(sourcePath), linkPath, 'dir');
+    res.json({ success: true });
+  } catch (err) {
+    res.json({ success: false, message: err.message });
+  }
+});
+
 router.post('/link', function(req, res) {
   try {
     const { sourcePath, targetPath, targetFilename } = req.body;

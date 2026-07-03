@@ -346,9 +346,12 @@
     </div>
 
     <div class="section">
-      <div style="padding-right: 20px; position: relative;"> 
+      <div style="padding-right: 100px; position: relative;"> 
         <div class="dir-nav" id="dirNav">/</div>
-        <span style="position: absolute; top: 5px; right: 5px;background: #4CAF50; color: white; padding: 2px 6px; border-radius: 4px; cursor: pointer;"  onclick="showNewFolderModal()">+</span>
+        <div style="position: absolute; top: 2px; right: 5px; display: flex; gap: 6px;">
+          <button class="btn btn-primary" onclick="showSymlinkModal()" title="创建软链接">🔗</button>
+          <button class="btn btn-primary" onclick="showNewFolderModal()" title="新建文件夹">+</button>
+        </div>
       </div>
       
       <div class="list-container" id="dirList">
@@ -393,6 +396,19 @@
       <div class="modal-actions">
         <button class="btn btn-cancel" onclick="closeNewFolderModal()">取消</button>
         <button class="btn btn-primary" onclick="createNewFolder()">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="symlinkModal">
+    <div class="modal-content" style="max-width: 90%; width: 400px;">
+      <h3>选择目标文件夹</h3>
+      <p style="font-size:12px;color:#666;margin-bottom:10px;">将在所选文件夹下创建指向当前目录的软链接</p>
+      <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px; padding: 8px;" id="symlinkDirTree"></div>
+      <div style="margin-top:8px;font-size:12px;color:#888;" id="symlinkSelected">未选择</div>
+      <div class="modal-actions">
+        <button class="btn btn-cancel" onclick="closeSymlinkModal()">取消</button>
+        <button class="btn btn-primary" onclick="createSymlink()">确定</button>
       </div>
     </div>
   </div>
@@ -1150,6 +1166,134 @@
     }
     function escapeHtmlAttr(str) {
       return escapeHtml(escapeJsString(str));
+    }
+
+    // 软链接功能
+    let symlinkSelectedDir = null;
+    let symlinkExpandedDirs = new Set();
+
+    async function showSymlinkModal() {
+      if (!currentDir) {
+        showToast('请先进入一个文件夹');
+        return;
+      }
+      symlinkSelectedDir = null;
+      symlinkExpandedDirs = new Set();
+      document.getElementById('symlinkSelected').textContent = '未选择';
+      document.getElementById('symlinkModal').classList.add('active');
+      await loadSymlinkDirTree('');
+    }
+
+    function closeSymlinkModal() {
+      document.getElementById('symlinkModal').classList.remove('active');
+    }
+
+    async function loadSymlinkDirTree(dir) {
+      const treeDiv = document.getElementById('symlinkDirTree');
+      try {
+        const res = await fetch('/song/dir?dir=' + encodeURIComponent(dir));
+        const data = await res.json();
+        if (!data.success) return;
+        
+        const folders = data.data.filter(item => item.isDirectory);
+        let html = '';
+        
+        if (!dir) {
+          html += `<div style="padding:6px;cursor:pointer;color:#2196F3;font-weight:500;" onclick="selectSymlinkDir('')">📁 music (根目录)</div>`;
+        }
+        
+        const depth = dir ? dir.split('/').length : 0;
+        const indent = '  '.repeat(depth + 1);
+        
+        for (const folder of folders) {
+          const isExpanded = symlinkExpandedDirs.has(folder.path);
+          html += `<div style="padding:4px 6px;">`;
+          html += `<span style="cursor:pointer;color:#666;margin-right:4px;" onclick="toggleSymlinkDir('${escapeHtmlAttr(folder.path)}')">${isExpanded ? '▼' : '▶'}</span>`;
+          html += `<span style="cursor:pointer;" onclick="selectSymlinkDir('${escapeHtmlAttr(folder.path)}')">📁 ${escapeHtml(folder.name)}</span>`;
+          html += `</div>`;
+          
+          if (isExpanded) {
+            html += `<div id="symlink-sub-${escapeHtml(folder.path)}">`;
+            html += await loadSubDirs(folder.path);
+            html += `</div>`;
+          }
+        }
+        
+        treeDiv.innerHTML = html;
+      } catch (err) {
+        showToast('加载目录失败: ' + err.message);
+      }
+    }
+
+    async function loadSubDirs(dir) {
+      try {
+        const res = await fetch('/song/dir?dir=' + encodeURIComponent(dir));
+        const data = await res.json();
+        if (!data.success) return '';
+        
+        const folders = data.data.filter(item => item.isDirectory);
+        let html = '';
+        const depth = dir.split('/').length;
+        const indent = '  '.repeat(depth + 1);
+        
+        for (const folder of folders) {
+          const isExpanded = symlinkExpandedDirs.has(folder.path);
+          html += `<div style="padding:4px 6px 4px ${20 + depth * 16}px;">`;
+          html += `<span style="cursor:pointer;color:#666;margin-right:4px;" onclick="toggleSymlinkDir('${escapeHtmlAttr(folder.path)}')">${isExpanded ? '▼' : '▶'}</span>`;
+          html += `<span style="cursor:pointer;" onclick="selectSymlinkDir('${escapeHtmlAttr(folder.path)}')">📁 ${escapeHtml(folder.name)}</span>`;
+          html += `</div>`;
+          
+          if (isExpanded) {
+            html += await loadSubDirs(folder.path);
+          }
+        }
+        return html;
+      } catch (err) {
+        return '';
+      }
+    }
+
+    async function toggleSymlinkDir(dir) {
+      if (symlinkExpandedDirs.has(dir)) {
+        symlinkExpandedDirs.delete(dir);
+      } else {
+        symlinkExpandedDirs.add(dir);
+      }
+      await loadSymlinkDirTree('');
+    }
+
+    function selectSymlinkDir(dir) {
+      symlinkSelectedDir = dir;
+      const display = dir || 'music (根目录)';
+      document.getElementById('symlinkSelected').textContent = '已选择: ' + display;
+    }
+
+    async function createSymlink() {
+      if (symlinkSelectedDir === null) {
+        showToast('请选择目标文件夹');
+        return;
+      }
+      // 不能选择自己
+      if (symlinkSelectedDir === currentDir) {
+        showToast('不能选择当前目录');
+        return;
+      }
+      try {
+        const res = await fetch('/song/symlink', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source: currentDir, target: symlinkSelectedDir })
+        });
+        const data = await res.json();
+        if (data.success) {
+          closeSymlinkModal();
+          showToast('软链接创建成功');
+        } else {
+          showToast('创建失败: ' + data.message);
+        }
+      } catch (err) {
+        showToast('创建失败: ' + err.message);
+      }
     }
 
     // 初始化
