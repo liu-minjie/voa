@@ -927,7 +927,7 @@
             const isMobile = window.innerWidth < 768;
             resultDiv.innerHTML = data.data.map(item => `
               <div class="list-item">
-                <div class="item-info" onclick="playMusic('${escapeHtml(item.path)}', '${escapeHtml(item.filename)}')">
+                <div class="item-info" onclick="playMusic('${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.filename)}')">
                   <div class="name">${escapeHtml(item.filename)} <span style="font-size:11px;color:#999;font-weight:normal;">(${formatFileSize(item.size)})</span></div>
                   <div class="path" style="word-break:break-all;white-space:normal;font-size:11px;color:#888;">${escapeHtml(item.path)}</div>
                 </div>
@@ -942,7 +942,7 @@
                   </select>
                 ` : `
                   <div class="item-actions">
-                    <button class="btn btn-play" onclick="playMusic('${escapeHtml(item.path)}', '${escapeHtml(item.filename)}')">播放</button>
+                    <button class="btn btn-play" onclick="playMusic('${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.filename)}')">播放</button>
                     ${selectedLinkSource && selectedLinkSource.path !== item.path ?
                       `<button class="btn btn-link" onclick="createHardLink('${escapeHtml(selectedLinkSource.path)}', '${escapeHtml(item.path)}', '${escapeHtml(item.filename)}')">目标</button>` :
                       `<button class="btn btn-info" onclick="handleLinkClick(event, '${escapeHtml(item.path)}', '${escapeHtml(item.filename)}')">${selectedLinkSource && selectedLinkSource.path === item.path ? '取消' : '链接'}</button>`
@@ -1008,12 +1008,12 @@
           } else {
             listDiv.innerHTML = data.data.map(item => `
               <div class="dir-item ${item.isDirectory ? 'folder' : 'file'}" onclick="${item.isDirectory ? `loadDir('${escapeHtml(item.path)}')` : `handleTap('${escapeHtml(item.path)}', '${escapeHtml(item.name)}')`}">
-                <div class="item-info">
-                  <div class="name">${escapeHtml(item.name)}</div>
+                <div class="item-info" ${!item.isDirectory ? `onclick="event.stopPropagation(); playMusic('${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.name)}')"` : ''}>
+                  <div class="name">${escapeHtml(item.name)} ${!item.isDirectory ? `<span style="font-size:11px;color:#999;font-weight:normal;">(${formatFileSize(item.size)})</span>` : ''}</div>
                   <div class="path">${escapeHtml(item.path)}</div>
                 </div>
                 <div class="item-actions">
-                  ${!item.isDirectory ? `<button class="btn btn-play" onclick="event.stopPropagation(); playMusic('${escapeHtml(item.path)}', '${escapeHtml(item.name)}')">播放</button>` : ''}
+                  ${!item.isDirectory ? `<button class="btn btn-play" onclick="event.stopPropagation(); playMusic('${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.name)}')">播放</button>` : ''}
                   <button class="btn btn-warning" onclick="event.stopPropagation(); showRenameModal('${escapeHtml(item.name)}', '${escapeHtml(item.path)}')">重命名</button>
                   <button class="btn btn-danger" onclick="event.stopPropagation(); deleteFile('${escapeHtml(item.path)}')">删除</button>
                 </div>
@@ -1143,7 +1143,13 @@
     }
 
     function escapeHtml(str) {
-      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function escapeJsString(str) {
+      return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    }
+    function escapeHtmlAttr(str) {
+      return escapeHtml(escapeJsString(str));
     }
 
     // 初始化
