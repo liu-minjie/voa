@@ -662,7 +662,7 @@ async function loadDir(dir = '') {
               <div class="path">${escapeHtml(item.path)}</div>
             </div>
             <div class="custom-select" onclick="event.stopPropagation()">
-              <select onchange="handleDirAction(this, '${escapeHtml(item.path)}', '${escapeHtml(item.name)}', ${item.isDirectory})">
+              <select onchange="handleDirAction(this, '${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.name)}', ${item.isDirectory})">
                 <option value="">操作</option>
                 ${!item.isDirectory ? `<option value="play">播放</option>` : ''}
                 <option value="copy">复制文件名</option>
