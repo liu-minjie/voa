@@ -23,7 +23,11 @@ const AVPROBE_FORMATS = ['wma', 'wmv', 'flv'];
 function handleTap(filePath, filename) {
   const now = Date.now();
   if (now - lastTapTime < 300 && lastTapElement === filePath) {
-    playMusicWithCache(filePath, filename);
+    if (shouldUseTranscode(filename)) {
+      playMusicWithCache(filePath, filename);
+    } else {
+      playMusic(filePath, filename);
+    }
     lastTapTime = 0;
     lastTapElement = null;
   } else {
@@ -332,7 +336,16 @@ async function waitForTranscode(filePath, filename) {
 }
 
 async function playMusicWithCache(filePath, filename) {
+  if (isPlayingMusic && currentFilePath === filePath) {
+    togglePlay();
+    return;
+  }
+  
+  isPlayingMusic = true;
   closePlayer();
+  
+  await new Promise(resolve => setTimeout(resolve, 50));
+  
   currentFilePath = filePath;
   currentFilename = filename;
 
@@ -368,6 +381,8 @@ async function playMusicWithCache(filePath, filename) {
   } catch (err) {
     showToast('播放失败: ' + err.message);
     closePlayer();
+  } finally {
+    isPlayingMusic = false;
   }
 }
 
@@ -695,9 +710,6 @@ function buildDirNav(dir) {
 }
 
 async function deleteFile(filePath) {
-  if (!confirm('确定要删除这个文件/目录吗？')) {
-    return;
-  }
   try {
     const res = await fetch('/song/delete-file', {
       method: 'POST',
