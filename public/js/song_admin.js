@@ -180,20 +180,35 @@ function initPlayer() {
   audio.addEventListener('error', onAudioError);
 }
 
+let isPlayingMusic = false;
+
 async function playMusic(filePath, filename) {
+  if (isPlayingMusic && currentFilePath === filePath) {
+    togglePlay();
+    return;
+  }
+  
+  isPlayingMusic = true;
   closePlayer();
+  
+  await new Promise(resolve => setTimeout(resolve, 50));
+  
   currentFilePath = filePath;
   currentFilename = filename;
 
   document.getElementById('playerTitle').textContent = filename;
   document.getElementById('playerBar').classList.add('active');
 
-  if (shouldUseAvbridge(filename)) {
-    await playWithAvbridge(filePath, filename);
-  } else if (shouldUseTranscode(filename)) {
-    await playWithTranscode(filePath, filename);
-  } else {
-    await playWithNativeAudio(filePath, filename);
+  try {
+    if (shouldUseAvbridge(filename)) {
+      await playWithAvbridge(filePath, filename);
+    } else if (shouldUseTranscode(filename)) {
+      await playWithTranscode(filePath, filename);
+    } else {
+      await playWithNativeAudio(filePath, filename);
+    }
+  } finally {
+    isPlayingMusic = false;
   }
 }
 
