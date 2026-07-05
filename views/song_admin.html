@@ -22,7 +22,7 @@
     </div>
 
     <div class="section">
-      <div style="padding-right: 100px; position: relative;"> 
+      <div class="dir-nav-wrapper"> 
         <div class="dir-nav" id="dirNav">/</div>
         <div style="position: absolute; top: 2px; right: 5px; display: flex; gap: 6px;">
           <button class="btn btn-primary" onclick="showSymlinkModal()" title="创建软链接">🔗</button>
@@ -42,13 +42,15 @@
       <div class="player-title" id="playerTitle">未播放</div>
       <button class="player-close" onclick="closePlayer()">关闭</button>
     </div>
-    <div class="player-progress">
-      <span class="player-time" id="playerCurrentTime">00:00</span>
-      <input type="range" id="playerProgress" min="0" max="100" value="0" oninput="seekTo()">
-      <span class="player-time" id="playerTotalTime">00:00</span>
-    </div>
-    <div class="player-controls">
-      <button class="player-btn" id="playerPlayBtn" onclick="togglePlay()">▶</button>
+    <div class="player-bottom">
+      <div class="player-controls">
+        <button class="player-btn" id="playerPlayBtn" onclick="togglePlay()">▶</button>
+      </div>
+      <div class="player-progress">
+        <span class="player-time" id="playerCurrentTime">00:00</span>
+        <input type="range" id="playerProgress" min="0" max="100" value="0" oninput="seekTo()">
+        <span class="player-time" id="playerTotalTime">00:00</span>
+      </div>
     </div>
   </div>
 

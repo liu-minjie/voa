@@ -202,6 +202,7 @@ async function playMusic(filePath, filename) {
 
   document.getElementById('playerTitle').textContent = filename;
   document.getElementById('playerBar').classList.add('active');
+  document.querySelector('.container').classList.add('has-player');
 
   try {
     if (shouldUseAvbridge(filename)) {
@@ -351,6 +352,7 @@ async function playMusicWithCache(filePath, filename) {
 
   document.getElementById('playerTitle').textContent = filename;
   document.getElementById('playerBar').classList.add('active');
+  document.querySelector('.container').classList.add('has-player');
 
   if (!audio) initPlayer();
 
@@ -492,6 +494,7 @@ function closePlayer() {
   currentFilePath = '';
   currentFilename = '';
   document.getElementById('playerBar').classList.remove('active');
+  document.querySelector('.container').classList.remove('has-player');
   document.getElementById('playerPlayBtn').textContent = '▶';
   document.getElementById('playerPlayBtn').classList.remove('player-btn-pause');
   document.getElementById('playerProgress').value = 0;
