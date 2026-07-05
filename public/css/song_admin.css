@@ -136,9 +136,8 @@ body {
 .item-info .path {
   font-size: 12px;
   color: #999;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-all;
+  white-space: normal;
 }
 .item-actions { display: flex; gap: 6px; }
 .btn {
