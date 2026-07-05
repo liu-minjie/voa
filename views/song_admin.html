@@ -25,7 +25,9 @@
       <div class="dir-nav-wrapper"> 
         <div class="dir-nav" id="dirNav">/</div>
         <div style="position: absolute; top: 2px; right: 5px; display: flex; gap: 6px;">
-          <button class="btn btn-primary" onclick="showSymlinkModal()" title="创建软链接">🔗</button>
+          <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()" title="上传文件">↑</button>
+          <input type="file" id="fileInput" multiple style="display:none" onchange="handleFileUpload(this)">
+          <button class="btn btn-primary" onclick="showSymlinkModal()" title="创建软链接">→</button>
           <button class="btn btn-primary" onclick="showNewFolderModal()" title="新建文件夹">+</button>
         </div>
       </div>

@@ -474,4 +474,53 @@ router.post('/link', function(req, res) {
   }
 });
 
+const multiparty = require('multiparty');
+
+router.post('/upload', function(req, res) {
+  const form = new multiparty.Form();
+  
+  form.parse(req, function(err, fields, files) {
+    if (err) {
+      return res.json({ success: false, message: '上传失败: ' + err.message });
+    }
+    
+    const targetDir = fields.dir ? fields.dir[0] : '';
+    const uploadFiles = files.files || [];
+    
+    if (uploadFiles.length === 0) {
+      return res.json({ success: false, message: '请选择要上传的文件' });
+    }
+    
+    const targetPath = path.join(musicPath, targetDir);
+    
+    if (!fs.existsSync(targetPath)) {
+      return res.json({ success: false, message: '目标目录不存在' });
+    }
+    
+    const uploaded = [];
+    const failed = [];
+    
+    for (const file of uploadFiles) {
+      const filename = file.originalFilename;
+      const tempPath = file.path;
+      const destPath = path.join(targetPath, filename);
+      
+      try {
+        fs.copyFileSync(tempPath, destPath);
+        fs.unlinkSync(tempPath);
+        uploaded.push(filename);
+      } catch (copyErr) {
+        failed.push(filename);
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: `成功上传 ${uploaded.length} 个文件${failed.length > 0 ? `，失败 ${failed.length} 个` : ''}`,
+      uploaded,
+      failed
+    });
+  });
+});
+
 module.exports = router;

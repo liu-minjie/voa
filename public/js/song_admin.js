@@ -773,6 +773,37 @@ async function confirmRename() {
   }
 }
 
+function handleFileUpload(input) {
+  const files = input.files;
+  if (!files || files.length === 0) return;
+
+  if (!currentDir) {
+    showToast('请先进入一个文件夹');
+    input.value = '';
+    return;
+  }
+
+  const formData = new FormData();
+  for (let i = 0; i < files.length; i++) {
+    formData.append('files', files[i]);
+  }
+  formData.append('dir', currentDir);
+
+  fetch('/song/upload', {
+    method: 'POST',
+    body: formData
+  }).then(res => res.json()).then(data => {
+    showToast(data.message);
+    if (data.success) {
+      loadDir(currentDir);
+    }
+  }).catch(err => {
+    showToast('上传失败: ' + err.message);
+  }).finally(() => {
+    input.value = '';
+  });
+}
+
 function showNewFolderModal() {
   const input = document.getElementById('newFolderNameInput');
   input.value = '';
@@ -828,10 +859,16 @@ async function showSymlinkModal() {
     return;
   }
   symlinkSelectedDir = null;
-  symlinkExpandedDirs = new Set();
+  symlinkExpandedDirs = new Set(['country']);
   document.getElementById('symlinkSelected').textContent = '未选择';
   document.getElementById('symlinkModal').classList.add('active');
   await loadSymlinkDirTree('');
+  setTimeout(() => {
+    const countrySpan = document.querySelector('span[onclick*="selectSymlinkDir(\'country\'"]');
+    if (countrySpan) {
+      countrySpan.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, 100);
 }
 
 function closeSymlinkModal() {
