@@ -592,7 +592,7 @@ async function searchMusic() {
               <div class="path" style="word-break:break-all;white-space:normal;font-size:11px;color:#888;">${escapeHtml(item.path)}</div>
             </div>
             <div class="custom-select" onclick="event.stopPropagation()">
-              <select onchange="handleMobileAction(this, '${escapeHtml(item.path)}', '${escapeHtml(item.filename)}')">
+              <select onchange="handleMobileAction(this, '${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.filename)}')">
                 <option value="">操作</option>
                 <option value="play">播放</option>
                 <option value="link">${selectedLinkSource && selectedLinkSource.path === item.path ? '取消链接' : '链接'}</option>
@@ -659,7 +659,7 @@ async function loadDir(dir = '') {
         listDiv.innerHTML = '<div class="empty">目录为空</div>';
       } else {
         listDiv.innerHTML = data.data.map(item => `
-          <div class="dir-item ${item.isDirectory ? 'folder' : 'file'}" data-name="${escapeHtmlAttr(item.name)}" onclick="${item.isDirectory ? `loadDir('${escapeHtml(item.path)}')` : `handleTap('${escapeHtml(item.path)}', '${escapeHtml(item.name)}')`}">
+          <div class="dir-item ${item.isDirectory ? 'folder' : 'file'}" data-name="${escapeHtmlAttr(item.name)}" onclick="${item.isDirectory ? `loadDir('${escapeHtmlAttr(item.path)}')` : `handleTap('${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.name)}')`}">
             <div class="item-info" ${!item.isDirectory ? `onclick="event.stopPropagation(); playMusic('${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.name)}')"` : ''}>
               <div class="name" ${!item.isDirectory && item.size < 1048576 ? 'style="color:#e53935;"' : ''}>${escapeHtml(item.name)} ${!item.isDirectory ? `<span style="font-size:11px;color:#999;font-weight:normal;">(${formatFileSize(item.size)})</span>` : ''}</div>
               <div class="path">${escapeHtml(item.path)}</div>
@@ -707,7 +707,7 @@ function buildDirNav(dir) {
   for (const part of parts) {
     if (!part) continue;
     current = current ? current + '/' + part : part;
-    html += ' / <a href="#" onclick="loadDir(\'' + escapeHtml(current) + '\'); return false;">' + escapeHtml(part) + '</a>';
+    html += ' / <a href="#" onclick="loadDir(\'' + escapeHtmlAttr(current) + '\'); return false;">' + escapeHtml(part) + '</a>';
   }
   return html;
 }
@@ -863,7 +863,7 @@ async function loadSymlinkDirTree(dir) {
       html += `</div>`;
 
       if (isExpanded) {
-        html += `<div id="symlink-sub-${escapeHtml(folder.path)}">`;
+        html += `<div id="symlink-sub-${escapeHtmlAttr(folder.path).replace(/\//g, '_')}">`;
         html += await loadSubDirs(folder.path);
         html += `</div>`;
       }
