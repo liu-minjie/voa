@@ -585,7 +585,7 @@ async function searchMusic() {
         resultDiv.innerHTML = data.data.map(item => `
           <div class="list-item">
             <div class="item-info" onclick="playMusic('${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.filename)}')">
-              <div class="name">${escapeHtml(item.filename)} <span style="font-size:11px;color:#999;font-weight:normal;">(${formatFileSize(item.size)})</span></div>
+              <div class="name" ${item.size < 1048576 ? 'style="color:#e53935;"' : ''}>${escapeHtml(item.filename)} <span style="font-size:11px;color:#999;font-weight:normal;">(${formatFileSize(item.size)})</span></div>
               <div class="path" style="word-break:break-all;white-space:normal;font-size:11px;color:#888;">${escapeHtml(item.path)}</div>
             </div>
             <div class="custom-select" onclick="event.stopPropagation()">
@@ -658,7 +658,7 @@ async function loadDir(dir = '') {
         listDiv.innerHTML = data.data.map(item => `
           <div class="dir-item ${item.isDirectory ? 'folder' : 'file'}" data-name="${escapeHtmlAttr(item.name)}" onclick="${item.isDirectory ? `loadDir('${escapeHtml(item.path)}')` : `handleTap('${escapeHtml(item.path)}', '${escapeHtml(item.name)}')`}">
             <div class="item-info" ${!item.isDirectory ? `onclick="event.stopPropagation(); playMusic('${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.name)}')"` : ''}>
-              <div class="name">${escapeHtml(item.name)} ${!item.isDirectory ? `<span style="font-size:11px;color:#999;font-weight:normal;">(${formatFileSize(item.size)})</span>` : ''}</div>
+              <div class="name" ${!item.isDirectory && item.size < 1048576 ? 'style="color:#e53935;"' : ''}>${escapeHtml(item.name)} ${!item.isDirectory ? `<span style="font-size:11px;color:#999;font-weight:normal;">(${formatFileSize(item.size)})</span>` : ''}</div>
               <div class="path">${escapeHtml(item.path)}</div>
             </div>
             <div class="custom-select" onclick="event.stopPropagation()">
