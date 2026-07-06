@@ -17,6 +17,9 @@ let selectedLinkSource = null;
 let scrollPositions = new Map();
 let focusedNames = new Map();
 
+let isBatchSelectMode = false;
+let selectedFiles = new Set();
+
 const NATIVE_FORMATS = ['mp3', 'aac', 'm4a', 'ogg', 'oga', 'wav', 'flac', 'midi', 'mid'];
 const AVPROBE_FORMATS = ['wma', 'wmv', 'flv'];
 
@@ -44,6 +47,9 @@ function handleMobileAction(select, filePath, filename) {
     case 'play':
       playMusic(filePath, filename);
       break;
+    case 'move':
+      showMoveModal(filePath);
+      break;
     case 'link':
       handleLinkClick({ stopPropagation: function(){} }, filePath, filename);
       break;
@@ -68,6 +74,9 @@ function handleDirAction(select, filePath, filename, isDirectory) {
   switch(action) {
     case 'play':
       playMusic(filePath, filename);
+      break;
+    case 'move':
+      showMoveModal(filePath);
       break;
     case 'copy':
       const nameWithoutExt = filename.replace(/\.[^.]+$/, '');
@@ -595,6 +604,7 @@ async function searchMusic() {
               <select onchange="handleMobileAction(this, '${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.filename)}')">
                 <option value="">操作</option>
                 <option value="play">播放</option>
+                <option value="move">移动</option>
                 <option value="link">${selectedLinkSource && selectedLinkSource.path === item.path ? '取消链接' : '链接'}</option>
                 ${selectedLinkSource && selectedLinkSource.path !== item.path ? `<option value="linkTo">目标</option>` : ''}
                 <option value="rename">重命名</option>
@@ -633,10 +643,165 @@ async function addToSongList(filename) {
 function addSong() {
   const filename = document.getElementById('searchInput').value.trim();
   if (!filename) {
-    showToast('请输入文件名');
+    showPlaylistModal();
     return;
   }
   addToSongList(filename);
+}
+
+let playlistSongs = [];
+let playlistCurrentIndex = 0;
+let playlistLoopMode = 'sequence';
+
+async function showPlaylistModal() {
+  const modal = document.getElementById('playlistModal');
+  const listDiv = document.getElementById('playlistList');
+  listDiv.innerHTML = '<div class="loading">加载中...</div>';
+  modal.classList.add('active');
+
+  try {
+    const res = await fetch('/song/playlist');
+    const data = await res.json();
+    if (data.success) {
+      playlistSongs = data.data;
+      playlistCurrentIndex = 0;
+      renderPlaylist();
+    } else {
+      listDiv.innerHTML = '<div class="empty">播放列表文件不存在</div>';
+    }
+  } catch (err) {
+    listDiv.innerHTML = '<div class="empty">加载播放列表失败</div>';
+  }
+}
+
+function closePlaylistModal() {
+  document.getElementById('playlistModal').classList.remove('active');
+  if (playlistAudio) {
+    playlistAudio.pause();
+    playlistAudio = null;
+  }
+}
+
+function renderPlaylist() {
+  const listDiv = document.getElementById('playlistList');
+  listDiv.innerHTML = playlistSongs.map((song, index) => `
+    <div class="playlist-item ${index === playlistCurrentIndex ? 'active' : ''}" onclick="playPlaylistSong(${index})">
+      <div class="playlist-index">${index + 1}</div>
+      <div class="playlist-info">
+        <div class="playlist-title">${escapeHtml(song.title)}</div>
+        <div class="playlist-path">${escapeHtml(song.path)}</div>
+      </div>
+    </div>
+  `).join('');
+  updatePlaylistPlayer();
+}
+
+let playlistAudio = null;
+
+function playPlaylistSong(index) {
+  if (index < 0 || index >= playlistSongs.length) return;
+  playlistCurrentIndex = index;
+  document.getElementById('playlistProgress').value = 0;
+  document.getElementById('playlistCurrentTime').textContent = '00:00';
+  document.getElementById('playlistTotalTime').textContent = '00:00';
+  renderPlaylist();
+  playCurrentPlaylistSong();
+}
+
+async function playCurrentPlaylistSong() {
+  if (playlistCurrentIndex >= playlistSongs.length) return;
+  
+  const song = playlistSongs[playlistCurrentIndex];
+  if (!song.path) return;
+
+  const cleanPath = song.path.replace(/^music\//, '');
+
+  try {
+    if (playlistAudio) {
+      playlistAudio.pause();
+    }
+
+    playlistAudio = new Audio(`/song/file?path=${encodeURIComponent(cleanPath)}`);
+    playlistAudio.onloadedmetadata = function() {
+      document.getElementById('playlistTotalTime').textContent = formatTime(playlistAudio.duration);
+    };
+    playlistAudio.ontimeupdate = function() {
+      if (playlistAudio.duration) {
+        const progress = (playlistAudio.currentTime / playlistAudio.duration) * 100;
+        document.getElementById('playlistProgress').value = progress;
+        document.getElementById('playlistCurrentTime').textContent = formatTime(playlistAudio.currentTime);
+      }
+    };
+    playlistAudio.onended = function() {
+      if (playlistLoopMode === 'single') {
+        playCurrentPlaylistSong();
+      } else {
+        playlistCurrentIndex++;
+        if (playlistCurrentIndex >= playlistSongs.length) {
+          playlistCurrentIndex = 0;
+        }
+        playPlaylistSong(playlistCurrentIndex);
+      }
+    };
+    await playlistAudio.play();
+    document.getElementById('playlistPlayBtn').textContent = '⏸';
+  } catch (err) {
+    console.error('播放失败:', err);
+  }
+}
+
+function playlistSeekTo() {
+  if (!playlistAudio || !playlistAudio.duration) return;
+  const progress = document.getElementById('playlistProgress').value;
+  const time = (progress / 100) * playlistAudio.duration;
+  playlistAudio.currentTime = time;
+}
+
+function playlistPrev() {
+  playlistCurrentIndex--;
+  if (playlistCurrentIndex < 0) {
+    playlistCurrentIndex = playlistSongs.length - 1;
+  }
+  playPlaylistSong(playlistCurrentIndex);
+}
+
+function playlistNext() {
+  playlistCurrentIndex++;
+  if (playlistCurrentIndex >= playlistSongs.length) {
+    playlistCurrentIndex = 0;
+  }
+  playPlaylistSong(playlistCurrentIndex);
+}
+
+function playlistTogglePlay() {
+  if (!playlistAudio) {
+    playCurrentPlaylistSong();
+    return;
+  }
+  const playBtn = document.getElementById('playlistPlayBtn');
+  if (playlistAudio.paused) {
+    playlistAudio.play();
+    playBtn.textContent = '⏸';
+  } else {
+    playlistAudio.pause();
+    playBtn.textContent = '▶';
+  }
+}
+
+function playlistToggleLoop() {
+  if (playlistLoopMode === 'sequence') {
+    playlistLoopMode = 'single';
+  } else {
+    playlistLoopMode = 'sequence';
+  }
+  document.getElementById('playlistLoopBtn').textContent = playlistLoopMode === 'single' ? '↻' : '→';
+}
+
+function updatePlaylistPlayer() {
+  if (playlistSongs.length === 0) return;
+  const song = playlistSongs[playlistCurrentIndex];
+  document.getElementById('playlistTitle').textContent = song.title;
+  document.getElementById('playlistLoopBtn').textContent = playlistLoopMode === 'single' ? '↻' : '→';
 }
 
 async function loadDir(dir = '') {
@@ -660,6 +825,7 @@ async function loadDir(dir = '') {
       } else {
         listDiv.innerHTML = data.data.map(item => `
           <div class="dir-item ${item.isDirectory ? 'folder' : 'file'}" data-name="${escapeHtmlAttr(item.name)}" onclick="${item.isDirectory ? `loadDir('${escapeHtmlAttr(item.path)}')` : `handleTap('${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.name)}')`}">
+            ${isBatchSelectMode ? `<input type="checkbox" ${selectedFiles.has(item.path) ? 'checked' : ''} onclick="event.stopPropagation(); toggleFileSelect('${escapeHtmlAttr(item.path)}')" style="margin-right:8px;transform:scale(1.2);">` : ''}
             <div class="item-info" ${!item.isDirectory ? `onclick="event.stopPropagation(); playMusic('${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.name)}')"` : ''}>
               <div class="name" ${!item.isDirectory && item.size < 1048576 ? 'style="color:#e53935;"' : ''}>${escapeHtml(item.name)} ${!item.isDirectory ? `<span style="font-size:11px;color:#999;font-weight:normal;">(${formatFileSize(item.size)})</span>` : ''}</div>
               <div class="path">${escapeHtml(item.path)}</div>
@@ -668,6 +834,7 @@ async function loadDir(dir = '') {
               <select onchange="handleDirAction(this, '${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.name)}', ${item.isDirectory})">
                 <option value="">操作</option>
                 ${!item.isDirectory ? `<option value="play">播放</option>` : ''}
+                <option value="move">移动</option>
                 <option value="copy">复制文件名</option>
                 <option value="rename">重命名</option>
                 <option value="delete">删除</option>
@@ -853,6 +1020,10 @@ function escapeHtmlAttr(str) {
 let symlinkSelectedDir = null;
 let symlinkExpandedDirs = new Set();
 
+let moveSourcePath = null;
+let moveSelectedDir = null;
+let moveExpandedDirs = new Set();
+
 async function showSymlinkModal() {
   if (!currentDir) {
     showToast('请先进入一个文件夹');
@@ -979,6 +1150,279 @@ async function createSymlink() {
     }
   } catch (err) {
     showToast('创建失败: ' + err.message);
+  }
+}
+
+function showMoveModal(filePath) {
+  moveSourcePath = filePath;
+  moveSelectedDir = null;
+  moveExpandedDirs = new Set();
+  document.getElementById('moveSelected').textContent = '未选择';
+  document.getElementById('moveModal').classList.add('active');
+  loadMoveDirTree('');
+}
+
+function closeMoveModal() {
+  document.getElementById('moveModal').classList.remove('active');
+}
+
+async function loadMoveDirTree(dir) {
+  const treeDiv = document.getElementById('moveDirTree');
+  try {
+    const res = await fetch('/song/dir?dir=' + encodeURIComponent(dir));
+    const data = await res.json();
+    if (!data.success) return;
+
+    const folders = data.data.filter(item => item.isDirectory);
+    let html = '';
+
+    if (!dir) {
+      html += `<div style="padding:6px;cursor:pointer;color:#2196F3;font-weight:500;" onclick="selectMoveDir('')">📁 music (根目录)</div>`;
+    }
+
+    const depth = dir ? dir.split('/').length : 0;
+
+    for (const folder of folders) {
+      const isExpanded = moveExpandedDirs.has(folder.path);
+      html += `<div style="padding:4px 6px;">`;
+      html += `<span style="cursor:pointer;color:#666;margin-right:4px;" onclick="toggleMoveDir('${escapeHtmlAttr(folder.path)}')">${isExpanded ? '▼' : '▶'}</span>`;
+      html += `<span style="cursor:pointer;" onclick="selectMoveDir('${escapeHtmlAttr(folder.path)}')">📁 ${escapeHtml(folder.name)}</span>`;
+      html += `</div>`;
+
+      if (isExpanded) {
+        html += `<div id="move-sub-${escapeHtmlAttr(folder.path).replace(/\//g, '_')}">`;
+        html += await loadMoveSubDirs(folder.path);
+        html += `</div>`;
+      }
+    }
+
+    treeDiv.innerHTML = html;
+  } catch (err) {
+    showToast('加载目录失败: ' + err.message);
+  }
+}
+
+async function loadMoveSubDirs(dir) {
+  try {
+    const res = await fetch('/song/dir?dir=' + encodeURIComponent(dir));
+    const data = await res.json();
+    if (!data.success) return '';
+
+    const folders = data.data.filter(item => item.isDirectory);
+    let html = '';
+    const depth = dir.split('/').length;
+
+    for (const folder of folders) {
+      const isExpanded = moveExpandedDirs.has(folder.path);
+      html += `<div style="padding:4px 6px 4px ${20 + depth * 16}px;">`;
+      html += `<span style="cursor:pointer;color:#666;margin-right:4px;" onclick="toggleMoveDir('${escapeHtmlAttr(folder.path)}')">${isExpanded ? '▼' : '▶'}</span>`;
+      html += `<span style="cursor:pointer;" onclick="selectMoveDir('${escapeHtmlAttr(folder.path)}')">📁 ${escapeHtml(folder.name)}</span>`;
+      html += `</div>`;
+
+      if (isExpanded) {
+        html += await loadMoveSubDirs(folder.path);
+      }
+    }
+    return html;
+  } catch (err) {
+    return '';
+  }
+}
+
+async function toggleMoveDir(dir) {
+  if (moveExpandedDirs.has(dir)) {
+    moveExpandedDirs.delete(dir);
+  } else {
+    moveExpandedDirs.add(dir);
+  }
+  await loadMoveDirTree('');
+}
+
+function selectMoveDir(dir) {
+  moveSelectedDir = dir;
+  const display = dir || 'music (根目录)';
+  document.getElementById('moveSelected').textContent = '已选择: ' + display;
+}
+
+async function doMove() {
+  if (!moveSourcePath) {
+    showToast('请选择要移动的文件');
+    return;
+  }
+  if (moveSelectedDir === null) {
+    showToast('请选择目标文件夹');
+    return;
+  }
+  try {
+    const res = await fetch('/song/move', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: moveSourcePath, target: moveSelectedDir })
+    });
+    const data = await res.json();
+    if (data.success) {
+      closeMoveModal();
+      showToast('移动成功');
+      loadDir(currentDir);
+    } else {
+      showToast('移动失败: ' + data.message);
+    }
+  } catch (err) {
+    showToast('移动失败: ' + err.message);
+  }
+}
+
+function toggleBatchSelect() {
+  if (isBatchSelectMode) {
+    if (selectedFiles.size > 0) {
+      startBatchMove();
+      return;
+    }
+    cancelBatchSelect();
+    return;
+  }
+  isBatchSelectMode = true;
+  selectedFiles.clear();
+  document.getElementById('batchMoveBtn').textContent = '✓';
+  document.getElementById('batchCancelBtn').style.display = 'block';
+  loadDir(currentDir);
+}
+
+function cancelBatchSelect() {
+  isBatchSelectMode = false;
+  selectedFiles.clear();
+  document.getElementById('batchMoveBtn').textContent = '→';
+  document.getElementById('batchCancelBtn').style.display = 'none';
+  loadDir(currentDir);
+}
+
+function toggleFileSelect(filePath) {
+  if (!isBatchSelectMode) return;
+  if (selectedFiles.has(filePath)) {
+    selectedFiles.delete(filePath);
+  } else {
+    selectedFiles.add(filePath);
+  }
+}
+
+let batchMoveSelectedDir = null;
+let batchMoveExpandedDirs = new Set();
+
+function startBatchMove() {
+  batchMoveSelectedDir = null;
+  batchMoveExpandedDirs = new Set();
+  document.getElementById('batchMoveSelected').textContent = '未选择';
+  document.getElementById('batchMoveModal').classList.add('active');
+  loadBatchMoveDirTree('');
+}
+
+function closeBatchMoveModal() {
+  document.getElementById('batchMoveModal').classList.remove('active');
+}
+
+async function loadBatchMoveDirTree(dir) {
+  const treeDiv = document.getElementById('batchMoveDirTree');
+  try {
+    const res = await fetch('/song/dir?dir=' + encodeURIComponent(dir));
+    const data = await res.json();
+    if (!data.success) return;
+
+    const folders = data.data.filter(item => item.isDirectory);
+    let html = '';
+
+    if (!dir) {
+      html += `<div style="padding:6px;cursor:pointer;color:#2196F3;font-weight:500;" onclick="selectBatchMoveDir('')">📁 music (根目录)</div>`;
+    }
+
+    const depth = dir ? dir.split('/').length : 0;
+
+    for (const folder of folders) {
+      const isExpanded = batchMoveExpandedDirs.has(folder.path);
+      html += `<div style="padding:4px 6px;">`;
+      html += `<span style="cursor:pointer;color:#666;margin-right:4px;" onclick="toggleBatchMoveDir('${escapeHtmlAttr(folder.path)}')">${isExpanded ? '▼' : '▶'}</span>`;
+      html += `<span style="cursor:pointer;" onclick="selectBatchMoveDir('${escapeHtmlAttr(folder.path)}')">📁 ${escapeHtml(folder.name)}</span>`;
+      html += `</div>`;
+
+      if (isExpanded) {
+        html += `<div id="batchMove-sub-${escapeHtmlAttr(folder.path).replace(/\//g, '_')}">`;
+        html += await loadBatchMoveSubDirs(folder.path);
+        html += `</div>`;
+      }
+    }
+
+    treeDiv.innerHTML = html;
+  } catch (err) {
+    showToast('加载目录失败: ' + err.message);
+  }
+}
+
+async function loadBatchMoveSubDirs(dir) {
+  try {
+    const res = await fetch('/song/dir?dir=' + encodeURIComponent(dir));
+    const data = await res.json();
+    if (!data.success) return '';
+
+    const folders = data.data.filter(item => item.isDirectory);
+    let html = '';
+    const depth = dir.split('/').length;
+
+    for (const folder of folders) {
+      const isExpanded = batchMoveExpandedDirs.has(folder.path);
+      html += `<div style="padding:4px 6px 4px ${20 + depth * 16}px;">`;
+      html += `<span style="cursor:pointer;color:#666;margin-right:4px;" onclick="toggleBatchMoveDir('${escapeHtmlAttr(folder.path)}')">${isExpanded ? '▼' : '▶'}</span>`;
+      html += `<span style="cursor:pointer;" onclick="selectBatchMoveDir('${escapeHtmlAttr(folder.path)}')">📁 ${escapeHtml(folder.name)}</span>`;
+      html += `</div>`;
+
+      if (isExpanded) {
+        html += await loadBatchMoveSubDirs(folder.path);
+      }
+    }
+    return html;
+  } catch (err) {
+    return '';
+  }
+}
+
+async function toggleBatchMoveDir(dir) {
+  if (batchMoveExpandedDirs.has(dir)) {
+    batchMoveExpandedDirs.delete(dir);
+  } else {
+    batchMoveExpandedDirs.add(dir);
+  }
+  await loadBatchMoveDirTree('');
+}
+
+function selectBatchMoveDir(dir) {
+  batchMoveSelectedDir = dir;
+  const display = dir || 'music (根目录)';
+  document.getElementById('batchMoveSelected').textContent = '已选择: ' + display;
+}
+
+async function doBatchMove() {
+  if (selectedFiles.size === 0) {
+    showToast('请选择要移动的文件');
+    return;
+  }
+  if (batchMoveSelectedDir === null) {
+    showToast('请选择目标文件夹');
+    return;
+  }
+  try {
+    const res = await fetch('/song/batch-move', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sources: Array.from(selectedFiles), target: batchMoveSelectedDir })
+    });
+    const data = await res.json();
+    if (data.success) {
+      closeBatchMoveModal();
+      cancelBatchSelect();
+      showToast('批量移动成功');
+    } else {
+      showToast('移动失败: ' + data.message);
+    }
+  } catch (err) {
+    showToast('移动失败: ' + err.message);
   }
 }
 

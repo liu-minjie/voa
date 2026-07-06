@@ -292,6 +292,90 @@ body {
   max-height: none;
   overflow-y: auto;
 }
+#moveModal .modal-content {
+  max-width: none;
+  width: 100%;
+  height: 100%;
+  max-height: 100vh;
+  border-radius: 0;
+  padding: 20px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+#moveModal #moveDirTree {
+  flex: 1;
+  max-height: none;
+  overflow-y: auto;
+}
+#batchMoveModal .modal-content {
+  max-width: none;
+  width: 100%;
+  height: 100%;
+  max-height: 100vh;
+  border-radius: 0;
+  padding: 20px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+#batchMoveModal #batchMoveDirTree {
+  flex: 1;
+  max-height: none;
+  overflow-y: auto;
+}
+#playlistModal .modal-content {
+  max-width: none;
+  width: 100%;
+  height: 100%;
+  max-height: 100vh;
+  border-radius: 0;
+  padding: 20px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+#playlistModal .player-progress input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #4CAF50;
+  cursor: pointer;
+}
+.playlist-item {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+.playlist-item:hover {
+  background-color: #f5f5f5;
+}
+.playlist-item.active {
+  background-color: #e3f2fd;
+}
+.playlist-index {
+  width: 30px;
+  text-align: center;
+  font-size: 14px;
+  color: #666;
+}
+.playlist-info {
+  flex: 1;
+}
+.playlist-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+.playlist-path {
+  font-size: 12px;
+  color: #888;
+  margin-top: 2px;
+}
 .modal-content input {
   width: 100%;
   padding: 12px 14px;
@@ -333,7 +417,7 @@ body {
 .player-info {
   display: flex;
   align-items: center;
-  margin-bottom: 10px;
+  margin-top: 10px;
 }
 .player-title {
   flex: 1;
@@ -399,4 +483,24 @@ body {
   border-radius: 4px;
   border: none;
   cursor: pointer;
+}
+
+.close-playlist {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  min-width: unset;
+  padding: 4px 8px;
+  border-radius: 15px;
+  border: none;
+}
+
+.close-playlist {
+  position:absolute;
+  top:10px;
+  right:10px;
+  padding:4px 8px;
+  z-index:1;
+  min-width: unset;
+  border-radius: 15px;
 }

@@ -332,6 +332,27 @@ router.get('/dir', function(req, res) {
   }
 });
 
+function findSymlinksTo(targetPath, searchDir) {
+  const symlinks = [];
+  try {
+    const items = fs.readdirSync(searchDir, { withFileTypes: true });
+    for (const item of items) {
+      const itemPath = path.join(searchDir, item.name);
+      if (item.isSymbolicLink()) {
+        const linkTarget = fs.readlinkSync(itemPath);
+        const resolvedTarget = path.isAbsolute(linkTarget) ? linkTarget : path.join(path.dirname(itemPath), linkTarget);
+        if (resolvedTarget === targetPath || path.resolve(resolvedTarget) === path.resolve(targetPath)) {
+          symlinks.push(itemPath);
+        }
+      } else if (item.isDirectory()) {
+        symlinks.push(...findSymlinksTo(targetPath, itemPath));
+      }
+    }
+  } catch (err) {
+  }
+  return symlinks;
+}
+
 router.post('/rename-file', function(req, res) {
   try {
     const { path: relPath, newName } = req.body;
@@ -351,7 +372,24 @@ router.post('/rename-file', function(req, res) {
       return res.json({ success: false, message: '目标文件已存在' });
     }
 
+    const stat = fs.lstatSync(oldFullPath);
+    const symlinks = [];
+    if (stat.isDirectory()) {
+      symlinks.push(...findSymlinksTo(oldFullPath, musicPath));
+    }
+
+    for (const linkPath of symlinks) {
+      fs.unlinkSync(linkPath);
+    }
+
     fs.renameSync(oldFullPath, newFullPath);
+
+    for (const linkPath of symlinks) {
+      const linkDir = path.dirname(linkPath);
+      const newLinkPath = path.join(linkDir, newName);
+      const newLinkTarget = path.relative(linkDir, newFullPath);
+      fs.symlinkSync(newLinkTarget, newLinkPath);
+    }
 
     res.json({ success: true });
   } catch (err) {
@@ -372,8 +410,10 @@ router.post('/delete-file', function(req, res) {
       return res.json({ success: false, message: '文件不存在' });
     }
 
-    const stat = fs.statSync(fullPath);
-    if (stat.isDirectory()) {
+    const stat = fs.lstatSync(fullPath);
+    if (stat.isSymbolicLink()) {
+      fs.unlinkSync(fullPath);
+    } else if (stat.isDirectory()) {
       fs.rmSync(fullPath, { recursive: true });
     } else {
       fs.unlinkSync(fullPath);
@@ -521,6 +561,107 @@ router.post('/upload', function(req, res) {
       failed
     });
   });
+});
+
+router.post('/move', function(req, res) {
+  try {
+    const { source, target } = req.body;
+    const sourcePath = path.join(musicPath, source);
+    const targetDir = path.join(musicPath, target);
+    const filename = path.basename(sourcePath);
+    const targetPath = path.join(targetDir, filename);
+
+    if (!fs.existsSync(sourcePath)) {
+      return res.json({ success: false, message: '源文件/目录不存在' });
+    }
+
+    if (!fs.existsSync(targetDir)) {
+      return res.json({ success: false, message: '目标目录不存在' });
+    }
+
+    if (fs.existsSync(targetPath)) {
+      return res.json({ success: false, message: '目标位置已存在同名文件/目录' });
+    }
+
+    fs.renameSync(sourcePath, targetPath);
+    res.json({ success: true, message: '移动成功' });
+  } catch (err) {
+    res.json({ success: false, message: '移动失败: ' + err.message });
+  }
+});
+
+router.post('/batch-move', function(req, res) {
+  try {
+    const { sources, target } = req.body;
+    const targetDir = path.join(musicPath, target);
+
+    if (!Array.isArray(sources) || sources.length === 0) {
+      return res.json({ success: false, message: '请选择要移动的文件' });
+    }
+
+    if (!fs.existsSync(targetDir)) {
+      return res.json({ success: false, message: '目标目录不存在' });
+    }
+
+    const moved = [];
+    const failed = [];
+
+    for (const source of sources) {
+      const sourcePath = path.join(musicPath, source);
+      const filename = path.basename(sourcePath);
+      const targetPath = path.join(targetDir, filename);
+
+      if (!fs.existsSync(sourcePath)) {
+        failed.push(filename);
+        continue;
+      }
+
+      if (fs.existsSync(targetPath)) {
+        failed.push(filename);
+        continue;
+      }
+
+      try {
+        fs.renameSync(sourcePath, targetPath);
+        moved.push(filename);
+      } catch (err) {
+        failed.push(filename);
+      }
+    }
+
+    res.json({
+      success: moved.length > 0,
+      message: `成功移动 ${moved.length} 个文件${failed.length > 0 ? `，失败 ${failed.length} 个` : ''}`,
+      moved,
+      failed
+    });
+  } catch (err) {
+    res.json({ success: false, message: '批量移动失败: ' + err.message });
+  }
+});
+
+router.get('/playlist', function(req, res) {
+  try {
+    const playlistPath = path.join(musicPath, 'play.lst');
+    if (!fs.existsSync(playlistPath)) {
+      return res.json({ success: false, message: '播放列表文件不存在' });
+    }
+
+    const content = fs.readFileSync(playlistPath, 'utf8');
+    const lines = content.split('\n').filter(line => line.trim());
+    const songs = lines.map((line, index) => {
+      const parts = line.split('|');
+      return {
+        index: index + 1,
+        path: parts[0] || '',
+        title: parts[1] || path.basename(parts[0] || '')
+      };
+    });
+
+    res.json({ success: true, data: songs });
+  } catch (err) {
+    res.json({ success: false, message: '读取播放列表失败: ' + err.message });
+  }
 });
 
 module.exports = router;

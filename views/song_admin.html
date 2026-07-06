@@ -25,9 +25,11 @@
       <div class="dir-nav-wrapper"> 
         <div class="dir-nav" id="dirNav">/</div>
         <div style="position: absolute; top: 2px; right: 5px; display: flex; gap: 6px;">
+          <button class="btn btn-primary" id="batchCancelBtn" onclick="cancelBatchSelect()" title="取消选择" style="display:none;">×</button>
+          <button class="btn btn-primary" id="batchMoveBtn" onclick="toggleBatchSelect()" title="批量移动">→</button>
           <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()" title="上传文件">↑</button>
           <input type="file" id="fileInput" multiple style="display:none" onchange="handleFileUpload(this)">
-          <button class="btn btn-primary" onclick="showSymlinkModal()" title="创建软链接">→</button>
+          <button class="btn btn-primary" onclick="showSymlinkModal()" title="创建软链接">↷</button>
           <button class="btn btn-primary" onclick="showNewFolderModal()" title="新建文件夹">+</button>
         </div>
       </div>
@@ -89,6 +91,59 @@
       <div class="modal-actions">
         <button class="btn btn-cancel" onclick="closeSymlinkModal()">取消</button>
         <button class="btn btn-primary" onclick="createSymlink()">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="moveModal">
+    <div class="modal-content">
+      <h3>选择目标文件夹</h3>
+      <p style="font-size:12px;color:#666;margin-bottom:10px;">将文件移动到所选文件夹</p>
+      <div style="border: 1px solid #ddd; border-radius: 6px; padding: 8px;" id="moveDirTree"></div>
+      <div style="margin-top:8px;font-size:12px;color:#888;" id="moveSelected">未选择</div>
+      <div class="modal-actions">
+        <button class="btn btn-cancel" onclick="closeMoveModal()">取消</button>
+        <button class="btn btn-primary" onclick="doMove()">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="batchMoveModal">
+    <div class="modal-content">
+      <h3>选择目标文件夹</h3>
+      <p style="font-size:12px;color:#666;margin-bottom:10px;">将选中的文件批量移动到所选文件夹</p>
+      <div style="border: 1px solid #ddd; border-radius: 6px; padding: 8px;" id="batchMoveDirTree"></div>
+      <div style="margin-top:8px;font-size:12px;color:#888;" id="batchMoveSelected">未选择</div>
+      <div class="modal-actions">
+        <button class="btn btn-cancel" onclick="closeBatchMoveModal()">取消</button>
+        <button class="btn btn-primary" onclick="doBatchMove()">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="playlistModal">
+    <div class="modal-content">
+      <button class="btn btn-cancel close-playlist" onclick="closePlaylistModal()" >×</button>
+      <div style="border: 1px solid #ddd; border-radius: 6px; padding: 8px; flex:1; overflow-y:auto;" id="playlistList"></div>
+      <div style="border-top:1px solid #eee;">
+        <div class="player-info">
+          <div class="player-title" id="playlistTitle">暂无歌曲</div>
+          <div style="display:flex;gap:10px;">
+            <button class="player-btn" onclick="playlistPrev()" title="上一首">←</button>
+            <button class="player-btn" onclick="playlistNext()" title="下一首">→</button>
+            <button class="player-btn" id="playlistLoopBtn" onclick="playlistToggleLoop()" title="循环模式">→</button>
+          </div>
+        </div>
+        <div class="player-bottom">
+          <div class="player-controls">
+            <button class="player-btn" id="playlistPlayBtn" onclick="playlistTogglePlay()">▶</button>
+          </div>
+          <div class="player-progress">
+            <span class="player-time" id="playlistCurrentTime">00:00</span>
+            <input type="range" id="playlistProgress" min="0" max="100" value="0" oninput="playlistSeekTo()" style="flex:1;height:4px;-webkit-appearance:none;background:#ddd;border-radius:2px;outline:none; margin-bottom: 0;padding: 0;">
+            <span class="player-time" id="playlistTotalTime">00:00</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
