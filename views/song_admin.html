@@ -40,25 +40,7 @@
     </div>
   </div>
 
-  <!-- 音乐播放器 -->
-  <div class="player-bar" id="playerBar">
-    <div class="player-info">
-      <div class="player-title" id="playerTitle">未播放</div>
-      <button class="player-close" onclick="closePlayer()">关闭</button>
-    </div>
-    <div class="player-bottom">
-      <div class="player-controls">
-        <button class="player-btn" id="playerPlayBtn" onclick="togglePlay()">▶</button>
-      </div>
-      <div class="player-progress">
-        <span class="player-time" id="playerCurrentTime">00:00</span>
-        <input type="range" id="playerProgress" min="0" max="100" value="0" oninput="seekTo()">
-        <span class="player-time" id="playerTotalTime">00:00</span>
-      </div>
-    </div>
-  </div>
-
-  <audio id="audioPlayer" style="display:none;"></audio>
+</audio>
 
   <div class="modal" id="renameModal">
     <div class="modal-content">
@@ -126,24 +108,7 @@
       <button class="btn btn-cancel close-playlist" onclick="closePlaylistModal()" >×</button>
       <div style="border: 1px solid #ddd; border-radius: 6px; padding: 8px; flex:1; overflow-y:auto;" id="playlistList"></div>
       <div style="border-top:1px solid #eee;">
-        <div class="player-info">
-          <div class="player-title" id="playlistTitle">暂无歌曲</div>
-          <div style="display:flex;gap:10px;">
-            <button class="player-btn" onclick="playlistPrev()" title="上一首">←</button>
-            <button class="player-btn" onclick="playlistNext()" title="下一首">→</button>
-            <button class="player-btn" id="playlistLoopBtn" onclick="playlistToggleLoop()" title="循环模式">→</button>
-          </div>
-        </div>
-        <div class="player-bottom">
-          <div class="player-controls">
-            <button class="player-btn" id="playlistPlayBtn" onclick="playlistTogglePlay()">▶</button>
-          </div>
-          <div class="player-progress">
-            <span class="player-time" id="playlistCurrentTime">00:00</span>
-            <input type="range" id="playlistProgress" min="0" max="100" value="0" oninput="playlistSeekTo()" style="flex:1;height:4px;-webkit-appearance:none;background:#ddd;border-radius:2px;outline:none; margin-bottom: 0;padding: 0;">
-            <span class="player-time" id="playlistTotalTime">00:00</span>
-          </div>
-        </div>
+        <div id="playlistPlayerContainer"></div>
       </div>
     </div>
   </div>

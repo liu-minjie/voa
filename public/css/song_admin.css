@@ -376,7 +376,7 @@ body {
   color: #888;
   margin-top: 2px;
 }
-.modal-content input {
+.modal-content input[type="text"] {
   width: 100%;
   padding: 12px 14px;
   border: 1px solid #ddd;
@@ -386,7 +386,7 @@ body {
   outline: none;
   -webkit-appearance: none;
 }
-.modal-content input:focus { border-color: #4CAF50; }
+.modal-content input[type="text"]:focus { border-color: #4CAF50; }
 .modal-actions { display: flex; gap: 10px; }
 .modal-actions .btn {
   flex: 1;
@@ -397,18 +397,20 @@ body {
 .modal-actions .btn-cancel { background: #f5f5f5; color: #666; }
 
 .player-bar {
+  background: #fff;
+  border-top: 1px solid #eee;
+  padding: 5px 16px;
+}
+.player-bar-fixed {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  background: #fff;
-  border-top: 1px solid #eee;
-  padding: 5px 16px;
   padding-bottom: calc(5px + env(safe-area-inset-bottom));
   z-index: 50;
   display: none;
 }
-.player-bar.active { display: block; }
+.player-bar-fixed.active { display: block; }
 .player-bottom {
   display: flex;
   align-items: center;
@@ -418,6 +420,17 @@ body {
   display: flex;
   align-items: center;
   margin-top: 10px;
+  justify-content: space-between;
+}
+.player-controls-right {
+  display: flex;
+  gap: 6px;
+  margin-right: 10px;
+}
+.player-controls-right .player-btn {
+  width: 28px;
+  height: 28px;
+  font-size: 12px;
 }
 .player-title {
   flex: 1;

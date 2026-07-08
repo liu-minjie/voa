@@ -56,6 +56,587 @@ function shouldUseTranscode(filename) {
   return ['ape'].includes(ext);
 }
 
+class MusicPlayer {
+  constructor(options) {
+    this.options = {
+      container: null,
+      removeMusicPrefix: false,
+      onIndexChange: null,
+      showCloseBtn: false,
+      isFixed: false,
+      ...options
+    };
+
+    this.audio = null;
+    this.avbridgePlayer = null;
+    this.isPlaying = false;
+    this.isPlayingMusic = false;
+    this.currentFilePath = '';
+    this.currentFilename = '';
+    this.playlist = [];
+    this.currentIndex = 0;
+    this.loopMode = 'sequence';
+
+    this.playEndTimer = null;
+    this.playCheckInterval = null;
+    this.playCheckStartTime = 0;
+
+    this.el = {
+      bar: null,
+      info: null,
+      title: null,
+      closeBtn: null,
+      bottom: null,
+      controls: null,
+      playBtn: null,
+      prevBtn: null,
+      nextBtn: null,
+      loopBtn: null,
+      progress: null,
+      progressEl: null,
+      currentTime: null,
+      totalTime: null
+    };
+
+    this.render();
+  }
+
+  render() {
+    const container = this.options.container;
+    if (!container) return;
+
+    const barClass = this.options.isFixed ? 'player-bar player-bar-fixed' : 'player-bar';
+    container.innerHTML = `
+      <div class="${barClass}">
+        <div class="player-info">
+          <div class="player-title">未播放</div>
+          <div class="player-controls-right">
+            <button class="player-btn player-prev-btn">←</button>
+            <button class="player-btn player-next-btn">→</button>
+            <button class="player-btn player-loop-btn">→</button>
+          </div>
+          ${this.options.showCloseBtn ? '<button class="player-close">关闭</button>' : ''}
+        </div>
+        <div class="player-bottom">
+          <div class="player-controls">
+            <button class="player-btn">▶</button>
+          </div>
+          <div class="player-progress">
+            <span class="player-time">00:00</span>
+            <input type="range" min="0" max="100" value="0">
+            <span class="player-time">00:00</span>
+          </div>
+        </div>
+      </div>
+    `;
+
+    this.el.bar = container.querySelector('.player-bar');
+    this.el.info = container.querySelector('.player-info');
+    this.el.title = container.querySelector('.player-title');
+    this.el.closeBtn = container.querySelector('.player-close');
+    this.el.bottom = container.querySelector('.player-bottom');
+    this.el.controls = container.querySelector('.player-controls');
+    this.el.playBtn = container.querySelector('.player-controls .player-btn');
+    this.el.prevBtn = container.querySelector('.player-prev-btn');
+    this.el.nextBtn = container.querySelector('.player-next-btn');
+    this.el.loopBtn = container.querySelector('.player-loop-btn');
+    this.el.progress = container.querySelector('.player-progress');
+    this.el.progressEl = container.querySelector('input[type="range"]');
+    this.el.currentTime = container.querySelectorAll('.player-time')[0];
+    this.el.totalTime = container.querySelectorAll('.player-time')[1];
+
+    this.el.playBtn.addEventListener('click', () => this.togglePlay());
+    this.el.progressEl.addEventListener('input', () => this.seekTo());
+    if (this.el.closeBtn) {
+      this.el.closeBtn.addEventListener('click', () => this.close());
+    }
+    if (this.el.prevBtn) {
+      this.el.prevBtn.addEventListener('click', () => this.prev());
+    }
+    if (this.el.nextBtn) {
+      this.el.nextBtn.addEventListener('click', () => this.next());
+    }
+    if (this.el.loopBtn) {
+      this.el.loopBtn.addEventListener('click', () => this.toggleLoop());
+    }
+
+    this.updateLoopBtn();
+  }
+
+  initAudio() {
+    if (this.audio) return;
+    this.audio = document.createElement('audio');
+    this.audio.addEventListener('timeupdate', () => this.updateProgress());
+    this.audio.addEventListener('loadedmetadata', () => this.updateDuration());
+    this.audio.addEventListener('ended', () => this.onAudioEnded());
+    this.audio.addEventListener('error', () => this.onAudioError());
+  }
+
+  setPlaylist(playlist) {
+    this.playlist = playlist;
+    this.currentIndex = 0;
+  }
+
+  setLoopMode(mode) {
+    this.loopMode = mode;
+  }
+
+  async play(filePath, filename, from) {
+    this.clearPlayTimers();
+
+    if (this.currentFilePath === filePath) {
+      this.togglePlay();
+      return;
+    }
+
+    this.close();
+
+    this.isPlayingMusic = true;
+
+    let cleanFilePath = filePath;
+    if (this.options.removeMusicPrefix) {
+      cleanFilePath = filePath.replace(/^music\//, '');
+    }
+
+    this.currentFilePath = cleanFilePath;
+    this.currentFilename = filename;
+
+    if (this.options.onIndexChange) {
+      this.options.onIndexChange(this.currentIndex);
+    }
+
+    this.updateTitle(filename);
+    this.showPlayer();
+
+    this.initAudio();
+
+    try {
+      if (shouldUseAvbridge(filename)) {
+        await this.playWithAvbridge(cleanFilePath, filename);
+      } else if (shouldUseTranscode(filename)) {
+        if (from === 'select') {
+          await this.playMusicWithCache(cleanFilePath, filename);
+        } else {
+          await this.playWithTranscode(cleanFilePath, filename);
+        }
+      } else if (isBrowserSupported(filename)) {
+        await this.playWithNativeAudio(cleanFilePath, filename);
+      } else {
+        console.error(filename, '不支持播放的格式');
+        this.onAudioEnded();
+      }
+    } finally {
+      this.isPlayingMusic = false;
+    }
+  }
+
+  async playWithAvbridge(filePath, filename) {
+    await loadAvbridge();
+    const audioUrl = `/song/file?path=${encodeURIComponent(filePath)}`;
+    const elementClass = customElements.get('avbridge-video');
+    if (!elementClass) {
+      throw new Error('avbridge-video 自定义元素未注册');
+    }
+
+    this.avbridgePlayer = new elementClass();
+    this.avbridgePlayer.src = audioUrl;
+    this.avbridgePlayer.autoplay = true;
+    this.avbridgePlayer.controls = false;
+
+    if (this.el.bar) {
+      this.el.bar.appendChild(this.avbridgePlayer);
+    }
+    this.avbridgePlayer.style.display = 'none';
+
+    let avbridgeErrorHandled = false;
+
+    this.avbridgePlayer.addEventListener('playing', () => {
+      this.isPlaying = true;
+      this.updatePlayBtn(true);
+    });
+
+    this.avbridgePlayer.addEventListener('pause', () => {
+      this.isPlaying = false;
+      this.updatePlayBtn(false);
+    });
+
+    this.avbridgePlayer.addEventListener('timeupdate', () => {
+      if (this.avbridgePlayer.duration) {
+        const progress = (this.avbridgePlayer.currentTime / this.avbridgePlayer.duration) * 100;
+        if (this.el.progressEl) this.el.progressEl.value = progress;
+        if (this.el.currentTime) this.el.currentTime.textContent = formatTime(this.avbridgePlayer.currentTime);
+        if (this.el.totalTime) this.el.totalTime.textContent = formatTime(this.avbridgePlayer.duration);
+      }
+    });
+
+    this.avbridgePlayer.addEventListener('ended', () => {
+      this.onAudioEnded();
+    });
+
+    this.avbridgePlayer.addEventListener('error', (e) => {
+      if (avbridgeErrorHandled) return;
+      avbridgeErrorHandled = true;
+      console.error('[avbridge] error event:', e);
+      showToast('播放错误: avbridge 无法加载文件');
+      this.close();
+    });
+
+    if (typeof this.avbridgePlayer.play === 'function') {
+      await this.avbridgePlayer.play();
+      this.startPlayEndCheck();
+    } else {
+      throw new Error('play 方法不可用');
+    }
+  }
+
+  async playWithTranscode(filePath, filename) {
+    const audioUrl = `/song/file?path=${encodeURIComponent(filePath)}&transcode=1`;
+    this.audio.src = audioUrl;
+    await this.audio.play();
+    this.isPlaying = true;
+    this.updatePlayBtn(true);
+  }
+
+  async playWithNativeAudio(filePath, filename) {
+    const audioUrl = `/song/file?path=${encodeURIComponent(filePath)}`;
+    this.audio.src = audioUrl;
+    await this.audio.play();
+    this.isPlaying = true;
+    this.updatePlayBtn(true);
+  }
+
+  async playMusicWithCache(filePath, filename) {
+    const audioUrl = `/song/file-cache?path=${encodeURIComponent(filePath)}`;
+    const res = await fetch(audioUrl);
+
+    if (res.status === 202) {
+      await this.waitForTranscode(filePath, filename);
+      const cacheUrl = `/song/file-cache?path=${encodeURIComponent(filePath)}`;
+      this.audio.src = cacheUrl;
+      await this.audio.play();
+      this.isPlaying = true;
+      this.updateTitle(filename);
+      this.updatePlayBtn(true);
+      this.startPlayEndCheck();
+    } else if (res.ok) {
+      this.audio.src = audioUrl;
+      await this.audio.play();
+      this.isPlaying = true;
+      this.updateTitle(filename);
+      this.updatePlayBtn(true);
+      this.startPlayEndCheck();
+    } else {
+      throw new Error('加载失败');
+    }
+  }
+
+  async waitForTranscode(filePath, filename) {
+    this.updateTitle(filename + ' (转码中...)');
+    this.showPlayer();
+
+    while (true) {
+      const res = await fetch(`/song/transcode-status?path=${encodeURIComponent(filePath)}`);
+      const data = await res.json();
+
+      if (data.hasCache) return true;
+      if (data.data.status === 'error') {
+        throw new Error(data.data.message || '转码失败');
+      }
+      if (data.data.status === 'transcoding') {
+        this.updateTitle(filename + ` (转码中 ${data.data.progress}%)`);
+      }
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+
+  togglePlay() {
+    if (!this.audio && !this.avbridgePlayer) return;
+
+    if (this.isPlaying) {
+      if (this.avbridgePlayer) {
+        try {
+          if (typeof this.avbridgePlayer.stop === 'function') {
+            this.avbridgePlayer.stop();
+          }
+        } catch (e) {
+          console.warn('[avbridge] stop error:', e);
+        }
+        try {
+          this.avbridgePlayer.pause();
+        } catch (e) {
+          console.warn('[avbridge] pause error:', e);
+        }
+      } else {
+        this.audio.pause();
+      }
+      this.isPlaying = false;
+      this.updatePlayBtn(false);
+      if (!isBrowserSupported(this.currentFilename)) {
+        this.clearPlayTimers();
+      }
+    } else {
+      if (this.avbridgePlayer) {
+        try {
+          this.avbridgePlayer.play().then(() => {
+            this.isPlaying = true;
+            this.updatePlayBtn(true);
+            if (!isBrowserSupported(this.currentFilename)) {
+              this.startPlayEndCheck();
+            }
+          }).catch(err => {
+            showToast('播放失败: ' + err.message);
+          });
+        } catch (err) {
+          showToast('播放失败: ' + err.message);
+        }
+      } else {
+        this.audio.play().then(() => {
+          this.isPlaying = true;
+          this.updatePlayBtn(true);
+          if (!isBrowserSupported(this.currentFilename)) {
+            this.startPlayEndCheck();
+          }
+        }).catch(err => {
+          showToast('播放失败: ' + err.message);
+        });
+      }
+    }
+  }
+
+  seekTo() {
+    if (!this.el.progressEl) return;
+    const progress = parseFloat(this.el.progressEl.value);
+    if (isNaN(progress)) return;
+
+    if (this.avbridgePlayer && this.avbridgePlayer.duration && isFinite(this.avbridgePlayer.duration)) {
+      const time = (progress / 100) * this.avbridgePlayer.duration;
+      if (isFinite(time)) {
+        this.avbridgePlayer.currentTime = time;
+      }
+    } else if (this.audio && this.audio.duration && isFinite(this.audio.duration)) {
+      const time = (progress / 100) * this.audio.duration;
+      if (isFinite(time)) {
+        this.audio.currentTime = time;
+      }
+    }
+  }
+
+  updateProgress() {
+    if (this.avbridgePlayer && this.avbridgePlayer.duration) {
+      const progress = (this.avbridgePlayer.currentTime / this.avbridgePlayer.duration) * 100;
+      if (this.el.progressEl) this.el.progressEl.value = progress;
+      if (this.el.currentTime) this.el.currentTime.textContent = formatTime(this.avbridgePlayer.currentTime);
+    } else if (this.audio && this.audio.duration) {
+      const progress = (this.audio.currentTime / this.audio.duration) * 100;
+      if (this.el.progressEl) this.el.progressEl.value = progress;
+      if (this.el.currentTime) this.el.currentTime.textContent = formatTime(this.audio.currentTime);
+    }
+  }
+
+  updateDuration() {
+    if (this.avbridgePlayer && this.avbridgePlayer.duration) {
+      if (this.el.totalTime) this.el.totalTime.textContent = formatTime(this.avbridgePlayer.duration);
+    } else if (this.audio && this.audio.duration) {
+      if (this.el.totalTime) this.el.totalTime.textContent = formatTime(this.audio.duration);
+    }
+  }
+
+  updateTitle(title) {
+    if (this.el.title) this.el.title.textContent = title;
+  }
+
+  updatePlayBtn(isPlaying) {
+    if (!this.el.playBtn) return;
+    this.el.playBtn.textContent = isPlaying ? '⏸' : '▶';
+    if (isPlaying) {
+      this.el.playBtn.classList.add('player-btn-pause');
+    } else {
+      this.el.playBtn.classList.remove('player-btn-pause');
+    }
+  }
+
+  showPlayer() {
+    if (this.el.bar) this.el.bar.classList.add('active');
+    const container = document.querySelector('.container');
+    if (container) container.classList.add('has-player');
+  }
+
+  hidePlayer() {
+    if (this.el.bar) this.el.bar.classList.remove('active');
+    const container = document.querySelector('.container');
+    if (container) container.classList.remove('has-player');
+  }
+
+  close() {
+    this.clearPlayTimers();
+
+    if (this.audio) {
+      this.audio.pause();
+      this.audio.removeAttribute('src');
+      this.audio.load();
+    }
+
+    if (this.avbridgePlayer) {
+      try {
+        if (typeof this.avbridgePlayer.stop === 'function') {
+          this.avbridgePlayer.stop();
+        }
+      } catch (e) {
+        console.warn('[avbridge] stop error:', e);
+      }
+      try {
+        this.avbridgePlayer.pause();
+      } catch (e) {
+        console.warn('[avbridge] pause error:', e);
+      }
+      try {
+        this.avbridgePlayer.remove();
+      } catch (e) {
+        console.warn('[avbridge] remove error:', e);
+      }
+      this.avbridgePlayer = null;
+    }
+
+    this.isPlaying = false;
+    this.currentFilePath = '';
+    this.currentFilename = '';
+
+    this.hidePlayer();
+    this.updatePlayBtn(false);
+
+    if (this.el.progressEl) this.el.progressEl.value = 0;
+    if (this.el.currentTime) this.el.currentTime.textContent = '00:00';
+    if (this.el.totalTime) this.el.totalTime.textContent = '00:00';
+  }
+
+  onAudioEnded() {
+    this.clearPlayTimers();
+    this.isPlaying = false;
+    this.updatePlayBtn(false);
+
+    if (this.el.progressEl) this.el.progressEl.value = 0;
+
+    if (this.playlist.length === 0) return;
+
+    if (this.loopMode === 'single') {
+      this.play(this.currentFilePath, this.currentFilename);
+    } else {
+      this.currentIndex = (this.currentIndex + 1) % this.playlist.length;
+      const nextSong = this.playlist[this.currentIndex];
+      if (nextSong) {
+        this.play(nextSong.path, nextSong.name || nextSong.title);
+      }
+    }
+  }
+
+  onAudioError() {
+    showToast('播放错误: 无法加载音频文件');
+    this.close();
+    this.onAudioEnded();
+  }
+
+  prev() {
+    if (this.playlist.length === 0) return;
+    this.currentIndex = (this.currentIndex - 1 + this.playlist.length) % this.playlist.length;
+    const song = this.playlist[this.currentIndex];
+    if (song) {
+      this.play(song.path, song.name || song.title);
+    }
+  }
+
+  next() {
+    if (this.playlist.length === 0) return;
+    this.currentIndex = (this.currentIndex + 1) % this.playlist.length;
+    const song = this.playlist[this.currentIndex];
+    if (song) {
+      this.play(song.path, song.name || song.title);
+    }
+  }
+
+  toggleLoop() {
+    this.loopMode = this.loopMode === 'sequence' ? 'single' : 'sequence';
+    this.updateLoopBtn();
+  }
+
+  updateLoopBtn() {
+    if (this.el.loopBtn) {
+      this.el.loopBtn.textContent = this.loopMode === 'single' ? '↻' : '→';
+    }
+  }
+
+  clearPlayTimers() {
+    if (this.playEndTimer) {
+      clearTimeout(this.playEndTimer);
+      this.playEndTimer = null;
+    }
+    if (this.playCheckInterval) {
+      clearInterval(this.playCheckInterval);
+      this.playCheckInterval = null;
+    }
+  }
+
+  parseTime(timeStr) {
+    const parts = timeStr.split(':');
+    if (parts.length === 2) {
+      return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+    }
+    return 0;
+  }
+
+  startPlayEndCheck() {
+    this.clearPlayTimers();
+    this.playCheckStartTime = Date.now();
+
+    this.playCheckInterval = setInterval(() => {
+      if (!this.isPlaying) return;
+
+      if (!this.el.currentTime) return;
+
+      const currentSeconds = this.parseTime(this.el.currentTime.textContent);
+
+      if (currentSeconds > 0) {
+        const totalSeconds = this.el.totalTime ? this.parseTime(this.el.totalTime.textContent) : 0;
+
+        if (totalSeconds > 0) {
+          clearInterval(this.playCheckInterval);
+          this.playCheckInterval = null;
+
+          this.playCheckInterval = setInterval(() => {
+            if (!this.isPlaying) return;
+
+            if (!this.el.currentTime) return;
+            const nowCurrent = this.parseTime(this.el.currentTime.textContent);
+
+            if (nowCurrent >= totalSeconds) {
+              this.clearPlayTimers();
+              this.onAudioEnded();
+            }
+          }, 5000);
+        } else {
+          if (currentSeconds > 299) {
+            clearInterval(this.playCheckInterval);
+            this.playCheckInterval = null;
+          }
+          this.playEndTimer = setTimeout(() => {
+            clearInterval(this.playCheckInterval);
+            this.playCheckInterval = null;
+            if (this.isPlaying) {
+              this.onAudioEnded();
+            }
+          }, 5 * 60 * 1000);
+        }
+      } else {
+        const elapsed = Date.now() - this.playCheckStartTime;
+        if (elapsed >= 60 * 1000) {
+          this.clearPlayTimers();
+          if (this.isPlaying) {
+            this.onAudioEnded();
+          }
+        }
+      }
+    }, 1000);
+  }
+}
 
 function handleSearchSelectAction(select, filePath, filename) {
   const action = select.value;
@@ -194,421 +775,37 @@ function loadAvbridge() {
     document.head.appendChild(script);
   });
 }
-async function playWithAvbridge(filePath, filename) {
-  try {
-    console.log('[avbridge] 开始加载, filePath:', filePath);
-    await loadAvbridge();
-    console.log('[avbridge] avbridge 已加载');
 
-    const audioUrl = `/song/file?path=${encodeURIComponent(filePath)}`;
-    console.log('[avbridge] audioUrl:', audioUrl);
 
-    const elementClass = customElements.get('avbridge-video');
-    if (!elementClass) {
-      throw new Error('avbridge-video 自定义元素未注册');
-    }
+const dirPlayerContainer = document.createElement('div');
+dirPlayerContainer.id = 'playerBar';
+document.body.appendChild(dirPlayerContainer);
 
-    avbridgePlayer = new elementClass();
-    console.log('[avbridge] 元素已创建');
+let dirPlayer = new MusicPlayer({
+  container: dirPlayerContainer,
+  showCloseBtn: true,
+  isFixed: true
+});
 
-    avbridgePlayer.src = audioUrl;
-    avbridgePlayer.autoplay = true;
-    avbridgePlayer.controls = false;
-
-    const container = document.getElementById('playerBar');
-    container.appendChild(avbridgePlayer);
-    avbridgePlayer.style.display = 'none';
-
-    let avbridgeErrorHandled = false;
-
-    avbridgePlayer.addEventListener('playing', () => {
-      console.log('[avbridge] playing event');
-      isPlaying = true;
-      document.getElementById('playerPlayBtn').textContent = '⏸';
-      document.getElementById('playerPlayBtn').classList.add('player-btn-pause');
-    });
-
-    avbridgePlayer.addEventListener('pause', () => {
-      console.log('[avbridge] pause event');
-      isPlaying = false;
-      document.getElementById('playerPlayBtn').textContent = '▶';
-      document.getElementById('playerPlayBtn').classList.remove('player-btn-pause');
-    });
-
-    avbridgePlayer.addEventListener('timeupdate', () => {
-      if (avbridgePlayer.duration) {
-        const progress = (avbridgePlayer.currentTime / avbridgePlayer.duration) * 100;
-        document.getElementById('playerProgress').value = progress;
-        document.getElementById('playerCurrentTime').textContent = formatTime(avbridgePlayer.currentTime);
-        document.getElementById('playerTotalTime').textContent = formatTime(avbridgePlayer.duration);
-      }
-    });
-
-    avbridgePlayer.addEventListener('ended', () => {
-      console.log('[avbridge] ended event');
-      onAudioEnded();
-    });
-
-    avbridgePlayer.addEventListener('error', (e) => {
-      if (avbridgeErrorHandled) return;
-      avbridgeErrorHandled = true;
-      console.error('[avbridge] error event:', e);
-      showToast('播放错误: avbridge 无法加载文件');
-      closePlayer();
-    });
-
-    console.log('[avbridge] 调用 play()');
-    if (typeof avbridgePlayer.play === 'function') {
-      await avbridgePlayer.play();
-      console.log('[avbridge] play() 调用完成');
-      startPlayEndCheck();
-    } else {
-      throw new Error('play 方法不可用');
-    }
-  } catch (err) {
-    console.error('[avbridge] playWithAvbridge error:', err);
-    showToast('播放失败: ' + err.message);
-  }
-}
-
-function initPlayer() {
-  if (audio) return;
-  audio = document.getElementById('audioPlayer');
-  audio.addEventListener('timeupdate', updateProgress);
-  audio.addEventListener('loadedmetadata', updateDuration);
-  audio.addEventListener('ended', onAudioEnded);
-  audio.addEventListener('error', onAudioError);
-}
-
-let isPlayingMusic = false;
 async function playMusic(filePath, filename, from) {
-  clearPlayTimers()
-  if (isPlayingMusic && currentFilePath === filePath) {
-    togglePlay();
-    return;
+  dirPlayer.setPlaylist(currentDirAudioFiles);
+  const index = currentDirAudioFiles.findIndex(item => item.path === filePath);
+  if (index >= 0) {
+    dirPlayer.currentIndex = index;
   }
-  
-  isPlayingMusic = true;
-  closePlayer();
-  
-  
-  currentFilePath = filePath;
-  currentFilename = filename;
-
-  document.getElementById('playerTitle').textContent = filename;
-  document.getElementById('playerBar').classList.add('active');
-  document.querySelector('.container').classList.add('has-player');
-
-  try {
-    if (shouldUseAvbridge(filename)) {
-      await playWithAvbridge(filePath, filename);
-    } else if (shouldUseTranscode(filename)) {
-      if (from === 'select') {
-        await playMusicWithCache(filePath, filename);
-      } else {
-        await playWithTranscode(filePath, filename);
-        //await waitForTranscode(filePath, filename, false);
-      }
-    } else if (isBrowserSupported(filename)) {
-      await playWithNativeAudio(filePath, filename);
-    } else {
-      console.error(filename, '不支持播放的格式');
-      onAudioEnded();
-    }
-  } finally {
-    isPlayingMusic = false;
-  }
-}
-
-
-
-async function playWithTranscode(filePath, filename) {
-  if (!audio) initPlayer();
-
-  const audioUrl = `/song/file?path=${encodeURIComponent(filePath)}&transcode=1`;
-  audio.src = audioUrl;
-
-  audio.play().then(() => {
-    isPlaying = true;
-    document.getElementById('playerPlayBtn').textContent = '⏸';
-    document.getElementById('playerPlayBtn').classList.add('player-btn-pause');
-  }).catch(err => {
-    showToast('播放失败: ' + err.message);
-  });
-}
-
-async function waitForTranscode(filePath, filename) {
-  document.getElementById('playerTitle').textContent = filename + ' (转码中...)';
-  document.getElementById('playerBar').classList.add('active');
-
-  while (true) {
-    try {
-      const res = await fetch(`/song/transcode-status?path=${encodeURIComponent(filePath)}`);
-      const data = await res.json();
-
-      if (data.hasCache) {
-        return true;
-      }
-
-      if (data.data.status === 'error') {
-        throw new Error(data.data.message || '转码失败');
-      }
-
-      if (data.data.status === 'transcoding') {
-        document.getElementById('playerTitle').textContent = filename + ` (转码中 ${data.data.progress}%)`;
-      }
-
-      await new Promise(resolve => setTimeout(resolve, 500));
-    } catch (err) {
-      throw err;
-    }
-  }
-}
-
-async function playMusicWithCache(filePath, filename) {
-  if (!audio) initPlayer();
-
-  try {
-    const audioUrl = `/song/file-cache?path=${encodeURIComponent(filePath)}`;
-    const res = await fetch(audioUrl);
-
-    if (res.status === 202) {
-      const data = await res.json();
-      await waitForTranscode(filePath, filename);
-
-      const cacheUrl = `/song/file-cache?path=${encodeURIComponent(filePath)}`;
-      audio.src = cacheUrl;
-      await audio.play();
-      isPlaying = true;
-      document.getElementById('playerTitle').textContent = filename;
-      document.getElementById('playerPlayBtn').textContent = '⏸';
-      document.getElementById('playerPlayBtn').classList.add('player-btn-pause');
-      startPlayEndCheck();
-    } else if (res.ok) {
-      audio.src = audioUrl;
-      await audio.play();
-      isPlaying = true;
-      document.getElementById('playerPlayBtn').textContent = '⏸';
-      document.getElementById('playerPlayBtn').classList.add('player-btn-pause');
-      startPlayEndCheck();
-    } else {
-      throw new Error('加载失败');
-    }
-  } catch (err) {
-    showToast('播放失败: ' + err.message);
-    closePlayer();
-  } finally {
-    isPlayingMusic = false;
-  }
-}
-
-async function playWithNativeAudio(filePath, filename) {
-  if (!audio) initPlayer();
-
-  const audioUrl = `/song/file?path=${encodeURIComponent(filePath)}`;
-  audio.src = audioUrl;
-
-  audio.play().then(() => {
-    isPlaying = true;
-    document.getElementById('playerPlayBtn').textContent = '⏸';
-    document.getElementById('playerPlayBtn').classList.add('player-btn-pause');
-  }).catch(err => {
-    showToast('播放失败: ' + err.message);
-  });
+  await dirPlayer.play(filePath, filename, from);
 }
 
 function togglePlay() {
-  if (avbridgePlayer) {
-    if (isPlaying) {
-      avbridgePlayer.pause();
-      clearPlayTimers();
-    } else {
-      avbridgePlayer.play();
-      startPlayEndCheck();
-    }
-    return;
-  }
-
-  if (!audio) return;
-
-  if (isPlaying) {
-    audio.pause();
-    isPlaying = false;
-    document.getElementById('playerPlayBtn').textContent = '▶';
-    document.getElementById('playerPlayBtn').classList.remove('player-btn-pause');
-    if (!isBrowserSupported(currentFilename)) {
-      clearPlayTimers();
-    }
-  } else {
-    audio.play().then(() => {
-      isPlaying = true;
-      document.getElementById('playerPlayBtn').textContent = '⏸';
-      document.getElementById('playerPlayBtn').classList.add('player-btn-pause');
-      if (!isBrowserSupported(currentFilename)) {
-        startPlayEndCheck();
-      }
-    }).catch(err => {
-      showToast('播放失败: ' + err.message);
-    });
-  }
+  dirPlayer.togglePlay();
 }
 
 function seekTo() {
-  const progress = document.getElementById('playerProgress').value;
-
-  if (avbridgePlayer && avbridgePlayer.duration) {
-    const time = (progress / 100) * avbridgePlayer.duration;
-    avbridgePlayer.currentTime = time;
-    return;
-  }
-
-  if (!audio || !audio.duration) return;
-
-  const time = (progress / 100) * audio.duration;
-  audio.currentTime = time;
-}
-
-function updateProgress() {
-  if (!audio || !audio.duration) return;
-
-  const progress = (audio.currentTime / audio.duration) * 100;
-  document.getElementById('playerProgress').value = progress;
-  document.getElementById('playerCurrentTime').textContent = formatTime(audio.currentTime);
-}
-
-function updateDuration() {
-  if (audio && audio.duration) {
-    document.getElementById('playerTotalTime').textContent = formatTime(audio.duration);
-  }
-}
-
-function onAudioEnded() {
-  clearPlayTimers();
-  
-  isPlaying = false;
-  document.getElementById('playerPlayBtn').textContent = '▶';
-  document.getElementById('playerPlayBtn').classList.remove('player-btn-pause');
-  document.getElementById('playerProgress').value = 0;
-  
-  if (currentDirAudioFiles.length === 0) return;
-  
-  const currentIndex = currentDirAudioFiles.findIndex(item => item.path === currentFilePath);
-  if (currentIndex >= 0) {
-    const nextIndex = (currentIndex + 1) % currentDirAudioFiles.length;
-    const nextFile = currentDirAudioFiles[nextIndex];
-    playMusic(nextFile.path, nextFile.name);
-  }
-}
-
-let errorHandled = false;
-
-function clearPlayTimers() {
-  if (playEndTimer) {
-    clearTimeout(playEndTimer);
-    playEndTimer = null;
-  }
-  if (playCheckInterval) {
-    clearInterval(playCheckInterval);
-    playCheckInterval = null;
-  }
-}
-
-function parseTime(timeStr) {
-  const parts = timeStr.split(':');
-  if (parts.length === 2) {
-    return parseInt(parts[0]) * 60 + parseInt(parts[1]);
-  }
-  return 0;
-}
-
-function startPlayEndCheck() {
-  clearPlayTimers();
-  playCheckStartTime = Date.now();
-  
-  playCheckInterval = setInterval(() => {
-    if (!isPlaying) return;
-    
-    const currentTimeStr = document.getElementById('playerCurrentTime').textContent;
-    const currentSeconds = parseTime(currentTimeStr);
-    
-    if (currentSeconds > 0) {
-      const totalTimeStr = document.getElementById('playerTotalTime').textContent;
-      const totalSeconds = parseTime(totalTimeStr);
-      
-      if (totalSeconds > 0) {
-        clearInterval(playCheckInterval);
-        playCheckInterval = null;
-        
-        playCheckInterval = setInterval(() => {
-          if (!isPlaying) return;
-          
-          const nowCurrentStr = document.getElementById('playerCurrentTime').textContent;
-          const nowCurrent = parseTime(nowCurrentStr);
-          
-          if (nowCurrent >= totalSeconds) {
-            clearPlayTimers();
-            onAudioEnded();
-          }
-        }, 5000);
-      } else {
-        if (currentSeconds > 299) {
-          clearInterval(playCheckInterval);
-          playCheckInterval = null;
-        }
-        playEndTimer = setTimeout(() => {
-          clearInterval(playCheckInterval);
-          playCheckInterval = null;
-          if (isPlaying) {
-            onAudioEnded();
-          }
-        }, 5 * 60 * 1000);
-      }
-    } else {
-      const elapsed = Date.now() - playCheckStartTime;
-      if (elapsed >= 60 * 1000) {
-        clearPlayTimers();
-        if (isPlaying) {
-          onAudioEnded();
-        }
-      }
-    }
-  }, 1000);
-}
-
-function onAudioError(e) {
-  if (errorHandled) return;
-  errorHandled = true;
-  console.log('播放错误: 无法加载音频文件');
-  closePlayer();
-  onAudioEnded();
+  dirPlayer.seekTo();
 }
 
 function closePlayer() {
-  clearPlayTimers();
-  
-  if (avbridgePlayer) {
-    avbridgePlayer.pause();
-    avbridgePlayer.remove();
-    avbridgePlayer = null;
-  }
-
-  if (audio) {
-    audio.pause();
-    audio.removeAttribute('src');
-    audio.load();
-  }
-
-  isPlaying = false;
-  errorHandled = false;
-  currentFilePath = '';
-  currentFilename = '';
-  document.getElementById('playerBar').classList.remove('active');
-  document.querySelector('.container').classList.remove('has-player');
-  document.getElementById('playerPlayBtn').textContent = '▶';
-  document.getElementById('playerPlayBtn').classList.remove('player-btn-pause');
-  document.getElementById('playerProgress').value = 0;
-  document.getElementById('playerCurrentTime').textContent = '00:00';
-  document.getElementById('playerTotalTime').textContent = '00:00';
+  dirPlayer.close();
 }
 
 function formatTime(seconds) {
@@ -752,11 +949,25 @@ let playlistSongs = [];
 let playlistCurrentIndex = 0;
 let playlistLoopMode = 'sequence';
 
+let playlistPlayer = null;
+
 async function showPlaylistModal() {
   const modal = document.getElementById('playlistModal');
   const listDiv = document.getElementById('playlistList');
   listDiv.innerHTML = '<div class="loading">加载中...</div>';
   modal.classList.add('active');
+
+  const playlistContainer = document.getElementById('playlistPlayerContainer');
+  if (!playlistPlayer && playlistContainer) {
+    playlistPlayer = new MusicPlayer({
+      container: playlistContainer,
+      removeMusicPrefix: true,
+      onIndexChange: (index) => {
+        playlistCurrentIndex = index;
+        renderPlaylist();
+      }
+    });
+  }
 
   try {
     const res = await fetch('/song/playlist');
@@ -775,9 +986,8 @@ async function showPlaylistModal() {
 
 function closePlaylistModal() {
   document.getElementById('playlistModal').classList.remove('active');
-  if (playlistAudio) {
-    playlistAudio.pause();
-    playlistAudio = null;
+  if (playlistPlayer) {
+    playlistPlayer.close();
   }
 }
 
@@ -795,112 +1005,52 @@ function renderPlaylist() {
   updatePlaylistPlayer();
 }
 
-let playlistAudio = null;
-
 function playPlaylistSong(index) {
   if (index < 0 || index >= playlistSongs.length) return;
   playlistCurrentIndex = index;
-  document.getElementById('playlistProgress').value = 0;
-  document.getElementById('playlistCurrentTime').textContent = '00:00';
-  document.getElementById('playlistTotalTime').textContent = '00:00';
+  playlistPlayer.setPlaylist(playlistSongs);
+  playlistPlayer.currentIndex = index;
+  playlistPlayer.setLoopMode(playlistLoopMode);
+  const song = playlistSongs[index];
+  playlistPlayer.play(song.path, song.title);
   renderPlaylist();
-  playCurrentPlaylistSong();
-}
-
-async function playCurrentPlaylistSong() {
-  if (playlistCurrentIndex >= playlistSongs.length) return;
-  
-  const song = playlistSongs[playlistCurrentIndex];
-  if (!song.path) return;
-
-  const cleanPath = song.path.replace(/^music\//, '');
-
-  try {
-    if (playlistAudio) {
-      playlistAudio.pause();
-    }
-
-    playlistAudio = new Audio(`/song/file?path=${encodeURIComponent(cleanPath)}`);
-    playlistAudio.onloadedmetadata = function() {
-      document.getElementById('playlistTotalTime').textContent = formatTime(playlistAudio.duration);
-    };
-    playlistAudio.ontimeupdate = function() {
-      if (playlistAudio.duration) {
-        const progress = (playlistAudio.currentTime / playlistAudio.duration) * 100;
-        document.getElementById('playlistProgress').value = progress;
-        document.getElementById('playlistCurrentTime').textContent = formatTime(playlistAudio.currentTime);
-      }
-    };
-    playlistAudio.onended = function() {
-      if (playlistLoopMode === 'single') {
-        playCurrentPlaylistSong();
-      } else {
-        playlistCurrentIndex++;
-        if (playlistCurrentIndex >= playlistSongs.length) {
-          playlistCurrentIndex = 0;
-        }
-        playPlaylistSong(playlistCurrentIndex);
-      }
-    };
-    await playlistAudio.play();
-    document.getElementById('playlistPlayBtn').textContent = '⏸';
-  } catch (err) {
-    console.error('播放失败:', err);
-  }
 }
 
 function playlistSeekTo() {
-  if (!playlistAudio || !playlistAudio.duration) return;
-  const progress = document.getElementById('playlistProgress').value;
-  const time = (progress / 100) * playlistAudio.duration;
-  playlistAudio.currentTime = time;
+  playlistPlayer.seekTo();
 }
 
 function playlistPrev() {
-  playlistCurrentIndex--;
-  if (playlistCurrentIndex < 0) {
-    playlistCurrentIndex = playlistSongs.length - 1;
-  }
-  playPlaylistSong(playlistCurrentIndex);
+  if (!playlistPlayer) return;
+  playlistPlayer.prev();
 }
 
 function playlistNext() {
-  playlistCurrentIndex++;
-  if (playlistCurrentIndex >= playlistSongs.length) {
-    playlistCurrentIndex = 0;
-  }
-  playPlaylistSong(playlistCurrentIndex);
+  if (!playlistPlayer) return;
+  playlistPlayer.next();
 }
 
 function playlistTogglePlay() {
-  if (!playlistAudio) {
-    playCurrentPlaylistSong();
-    return;
-  }
-  const playBtn = document.getElementById('playlistPlayBtn');
-  if (playlistAudio.paused) {
-    playlistAudio.play();
-    playBtn.textContent = '⏸';
+  if (!playlistPlayer) return;
+  if (!playlistPlayer.audio && playlistSongs.length > 0) {
+    playPlaylistSong(0);
   } else {
-    playlistAudio.pause();
-    playBtn.textContent = '▶';
+    playlistPlayer.togglePlay();
   }
 }
 
 function playlistToggleLoop() {
-  if (playlistLoopMode === 'sequence') {
-    playlistLoopMode = 'single';
-  } else {
-    playlistLoopMode = 'sequence';
-  }
-  document.getElementById('playlistLoopBtn').textContent = playlistLoopMode === 'single' ? '↻' : '→';
+  if (!playlistPlayer) return;
+  playlistPlayer.toggleLoop();
 }
 
 function updatePlaylistPlayer() {
   if (playlistSongs.length === 0) return;
   const song = playlistSongs[playlistCurrentIndex];
-  document.getElementById('playlistTitle').textContent = song.title;
-  document.getElementById('playlistLoopBtn').textContent = playlistLoopMode === 'single' ? '↻' : '→';
+  if (playlistPlayer) {
+    playlistPlayer.updateTitle(song.title);
+    playlistPlayer.setLoopMode(playlistLoopMode);
+  }
 }
 
 async function loadDir(dir = '') {
@@ -1528,6 +1678,5 @@ async function doBatchMove() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  initPlayer();
   loadDir();
 });
