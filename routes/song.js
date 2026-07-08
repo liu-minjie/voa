@@ -69,7 +69,7 @@ function transcodeToCache(inputPath, cachePath, key) {
 }
 
 router.get('/transcode-status', function(req, res) {
-  const filePath = req.query.path;
+  const filePath = req.query.path;  
   if (!filePath) {
     return res.status(400).json({ success: false, message: '缺少路径参数' });
   }
@@ -484,7 +484,7 @@ router.post('/symlink', function(req, res) {
   }
 });
 
-router.post('/link', function(req, res) {
+router.post('/hardlink', function(req, res) {
   try {
     const { sourcePath, targetPath, targetFilename } = req.body;
     
