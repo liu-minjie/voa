@@ -402,7 +402,15 @@ class MusicPlayer {
   }
 
   togglePlay() {
-    if (!this.audio && !this.avbridgePlayer) return;
+    if (!this.audio && !this.avbridgePlayer) {
+      if (this.playlist.length > 0) {
+        const song = this.playlist[this.currentIndex];
+        if (song) {
+          this.play(song.path, song.name || song.title);
+        }
+      }
+      return;
+    }
 
     if (this.isPlaying) {
       if (this.avbridgePlayer) {
@@ -977,6 +985,12 @@ async function searchMusic() {
                   <option value="delete">删除</option>
                 </select>
               </div>
+              <div class="desktop-actions">
+                <button class="btn btn-sm btn-play" onclick="playMusic('${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.filename)}', 'select')">播放</button>
+                <button class="btn btn-sm btn-info" onclick="showMoveModal('${escapeHtmlAttr(item.path)}')">移动</button>
+                <button class="btn btn-sm btn-warning" onclick="showRenameModal('${escapeHtmlAttr(item.filename)}', '${escapeHtmlAttr(item.path)}')">重命名</button>
+                <button class="btn btn-sm btn-danger" onclick="if(confirm('确定要删除 ${escapeHtml(item.filename)} 吗？')) deleteFile('${escapeHtmlAttr(item.path)}')">删除</button>
+              </div>
             </div>
           </div>
         `).join('');
@@ -1112,6 +1126,8 @@ function updatePlaylistPlayer() {
   if (playlistSongs.length === 0) return;
   const song = playlistSongs[playlistCurrentIndex];
   if (playlistPlayer) {
+    playlistPlayer.setPlaylist(playlistSongs);
+    playlistPlayer.currentIndex = playlistCurrentIndex;
     playlistPlayer.updateTitle(song.title);
     //playlistPlayer.setLoopMode(playlistLoopMode);
   }
@@ -1187,6 +1203,13 @@ async function loadDir(dir = '') {
                 <option value="rename">重命名</option>
                 <option value="delete">删除</option>
               </select>
+            </div>
+            <div class="desktop-actions">
+              ${!item.isDirectory ? `<button class="btn btn-sm btn-play" onclick="playMusic('${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.name)}', 'select')">播放</button>` : ''}
+              <button class="btn btn-sm btn-info" onclick="showMoveModal('${escapeHtmlAttr(item.path)}')">移动</button>
+              <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${escapeHtmlAttr(item.name).replace(/\.[^.]+$/, '')}').then(()=>showToast('已复制文件名')).catch(()=>showToast('复制失败'))">复制</button>
+              <button class="btn btn-sm btn-warning" onclick="showRenameModal('${escapeHtmlAttr(item.name)}', '${escapeHtmlAttr(item.path)}')">重命名</button>
+              <button class="btn btn-sm btn-danger" onclick="if(confirm('确定要删除${item.isDirectory ? '文件夹' : '文件'} ${escapeHtml(item.name)}吗？')) deleteFile('${escapeHtmlAttr(item.path)}')">删除</button>
             </div>
           </div>
         `).join('');

@@ -277,6 +277,21 @@ body {
   }
 }
 
+.desktop-actions {
+  display: none;
+  gap: 6px;
+  align-items: center;
+}
+
+@media (min-width: 800px) {
+  .custom-select {
+    display: none;
+  }
+  .desktop-actions {
+    display: flex;
+  }
+}
+
 
 
 
