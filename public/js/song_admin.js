@@ -1,29 +1,11 @@
-let searchResults = [];
 let currentDir = '';
-let renamePath = '';
-let searchTimer = null;
-let isComposing = false;
-let audio = null;
-let avbridgePlayer = null;
-let isPlaying = false;
-let currentFilePath = '';
-let currentFilename = '';
 let currentDirAudioFiles = [];
-
-
 let scrollPositions = new Map();
 let focusedNames = new Map();
 
-let isBatchSelectMode = false;
-let selectedFiles = new Set();
 
 const NATIVE_FORMATS = ['mp3', 'aac', 'm4a', 'ogg', 'oga', 'wav', 'flac', 'midi', 'mid'];
 const AVPROBE_FORMATS = ['wma', 'wmv', 'flv'];
-
-let playEndTimer = null;
-let playCheckInterval = null;
-let playCheckStartTime = 0;
-
 function getMimeType(ext) {
   const mimeTypes = {
     'mp3': 'audio/mpeg',
@@ -55,6 +37,44 @@ function shouldUseTranscode(filename) {
   const ext = getFileExtension(filename);
   return ['ape'].includes(ext);
 }
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function escapeJsString(str) {
+  return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+function escapeHtmlAttr(str) {
+  return escapeHtml(escapeJsString(str));
+}
+function showToast(message, duration = 2000) {
+  let toast = document.getElementById('toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'toast';
+    toast.className = 'toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.style.animation = 'toastFadeIn 0.3s ease forwards';
+  setTimeout(() => {
+    toast.style.animation = 'toastFadeOut 0.3s ease forwards';
+    setTimeout(() => toast.style.opacity = '0', 300);
+  }, duration);
+}
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+}
+function formatTime(seconds) {
+  if (!seconds || seconds < 0) return '00:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+
 
 class MusicPlayer {
   constructor(options) {
@@ -111,11 +131,42 @@ class MusicPlayer {
         <div class="player-info">
           <div class="player-title">未播放</div>
           <div class="player-controls-right">
-            <button class="player-btn player-prev-btn">←</button>
-            <button class="player-btn player-next-btn">→</button>
-            <button class="player-btn player-loop-btn">→</button>
+            <button class="player-btn player-prev-btn">
+              <svg viewBox="0 0 24 24" style="width: 18px;fill: var(--main-color);">
+                <rect x="4" y="4" width="3" height="16" rx="1" />
+                <polygon points="20,4 9,12 20,20" />
+              </svg>
+            </button>
+            <button class="player-btn player-next-btn">
+              <svg viewBox="0 0 24 24" style="width: 18px;fill: var(--main-color);">
+                <polygon points="4,4 15,12 4,20" />
+                <rect x="17" y="4" width="3" height="16" rx="1" />
+              </svg>
+              
+            </button>
+            <button class="player-btn player-loop-btn loop-list">
+              <svg class="loop-list-svg" viewBox="0 0 24 24" style="fill: var(--main-color);width: 18px;">
+                <path d="M19 7H6.83l2.59-2.59L8 3l-5 5 5 5 1.41-1.41L6.83 9H19c1.1 0 2 .9 2 2v3h2v-3c0-2.21-1.79-4-4-4zM5 17h12.17l-2.59 2.59L16 21l5-5-5-5-1.41 1.41L16.17 15H5c-1.1 0-2-.9-2-2v-3H1v3c0 2.21 1.79 4 4 4z"></path>
+              </svg>
+              <svg class="loop-one-svg" viewBox="0 0 24 24" style="width: 18px;fill: var(--main-color);">
+                <g transform="translate(0, -2)">
+                  <path d="M19 7H6.83l2.59-2.59L8 3l-5 5 5 5 1.41-1.41L6.83 9H19c1.1 0 2 .9 2 2v3h2v-3c0-2.21-1.79-4-4-4z"></path>
+                  <path d="M11 10h1.5v5H14v1.5h-3z"></path>
+                </g>
+                <g transform="translate(0, 2)">
+                  <path d="M5 17h12.17l-2.59 2.59L16 21l5-5-5-5-1.41 1.41L16.17 15H5c-1.1 0-2-.9-2-2v-3H1v3c0 2.21 1.79 4 4 4z"></path>
+                </g>
+              </svg>
+              <svg class="loop-shuffle-svg" viewBox="0 0 24 24" style="width: 20px;">
+                <path d="M4.5 8.2h3.2c3.8 0 5 7.6 8.7 7.6h1.1" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                <path d="M16.1 13.4 19.4 15.8 16.1 18.2Z" fill="currentColor"/>
+                <path d="M4.5 15.8h3.2c1.4 0 2.4-1 3.3-2.3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                <path d="M13 10.5c1-1.3 2-2.3 3.5-2.3h1" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                <path d="M16.1 5.8 19.4 8.2 16.1 10.6Z" fill="currentColor"/>
+              </svg>
+            </button>
           </div>
-          ${this.options.showCloseBtn ? '<button class="player-close">关闭</button>' : ''}
+          ${this.options.showCloseBtn ? '<span class="circle-close">×</span>' : ''}
         </div>
         <div class="player-bottom">
           <div class="player-controls">
@@ -133,7 +184,7 @@ class MusicPlayer {
     this.el.bar = container.querySelector('.player-bar');
     this.el.info = container.querySelector('.player-info');
     this.el.title = container.querySelector('.player-title');
-    this.el.closeBtn = container.querySelector('.player-close');
+    this.el.closeBtn = container.querySelector('.circle-close');
     this.el.bottom = container.querySelector('.player-bottom');
     this.el.controls = container.querySelector('.player-controls');
     this.el.playBtn = container.querySelector('.player-controls .player-btn');
@@ -147,6 +198,7 @@ class MusicPlayer {
 
     this.el.playBtn.addEventListener('click', () => this.togglePlay());
     this.el.progressEl.addEventListener('input', () => this.seekTo());
+    
     if (this.el.closeBtn) {
       this.el.closeBtn.addEventListener('click', () => this.close());
     }
@@ -444,10 +496,15 @@ class MusicPlayer {
   updateTitle(title) {
     if (this.el.title) this.el.title.textContent = title;
   }
-
+  updatePlayIcon(isPlaying) {
+    this.el.playBtn.innerHTML = isPlaying ? `<svg viewBox="0 0 24 24" style="width: 18px;fill: white;">
+        <rect x="5" y="4" width="4.5" height="16" rx="2"></rect>
+        <rect x="14.5" y="4" width="4.5" height="16" rx="2"></rect>
+      </svg>` : '▶';
+  }
   updatePlayBtn(isPlaying) {
     if (!this.el.playBtn) return;
-    this.el.playBtn.textContent = isPlaying ? '⏸' : '▶';
+    this.updatePlayIcon(isPlaying);
     if (isPlaying) {
       this.el.playBtn.classList.add('player-btn-pause');
     } else {
@@ -519,7 +576,13 @@ class MusicPlayer {
     if (this.playlist.length === 0) return;
 
     if (this.loopMode === 'single') {
-      this.play(this.currentFilePath, this.currentFilename);
+      this.replayCurrent();
+    } else if (this.loopMode === 'shuffle') {
+      const randomIndex = Math.floor(Math.random() * this.playlist.length);
+      const randomSong = this.playlist[randomIndex];
+      if (randomSong) {
+        this.play(randomSong.path, randomSong.name || randomSong.title);
+      }
     } else {
       this.currentIndex = (this.currentIndex + 1) % this.playlist.length;
       const nextSong = this.playlist[this.currentIndex];
@@ -535,32 +598,89 @@ class MusicPlayer {
     this.onAudioEnded();
   }
 
+  replayCurrent() {
+    if (this.avbridgePlayer) {
+      try {
+        this.avbridgePlayer.currentTime = 0;
+        this.avbridgePlayer.play().then(() => {
+          this.isPlaying = true;
+          this.updatePlayBtn(true);
+        });
+      } catch (err) {
+        console.warn('[avbridge] replay error:', err);
+      }
+    } else if (this.audio) {
+      this.audio.currentTime = 0;
+      this.audio.play().then(() => {
+        this.isPlaying = true;
+        this.updatePlayBtn(true);
+      });
+    }
+    if (this.el.progressEl) this.el.progressEl.value = 0;
+    if (this.el.currentTime) this.el.currentTime.textContent = '00:00';
+  }
+
   prev() {
     if (this.playlist.length === 0) return;
-    this.currentIndex = (this.currentIndex - 1 + this.playlist.length) % this.playlist.length;
-    const song = this.playlist[this.currentIndex];
-    if (song) {
-      this.play(song.path, song.name || song.title);
+
+    if (this.loopMode === 'single') {
+      this.replayCurrent();
+    } else if (this.loopMode === 'shuffle') {
+      const randomIndex = Math.floor(Math.random() * this.playlist.length);
+      const randomSong = this.playlist[randomIndex];
+      if (randomSong) {
+        this.currentIndex = randomIndex;
+        this.play(randomSong.path, randomSong.name || randomSong.title);
+      }
+    } else {
+      this.currentIndex = (this.currentIndex - 1 + this.playlist.length) % this.playlist.length;
+      const song = this.playlist[this.currentIndex];
+      if (song) {
+        this.play(song.path, song.name || song.title);
+      }
     }
   }
 
   next() {
     if (this.playlist.length === 0) return;
-    this.currentIndex = (this.currentIndex + 1) % this.playlist.length;
-    const song = this.playlist[this.currentIndex];
-    if (song) {
-      this.play(song.path, song.name || song.title);
+
+    if (this.loopMode === 'single') {
+      this.replayCurrent();
+    } else if (this.loopMode === 'shuffle') {
+      const randomIndex = Math.floor(Math.random() * this.playlist.length);
+      const randomSong = this.playlist[randomIndex];
+      if (randomSong) {
+        this.currentIndex = randomIndex;
+        this.play(randomSong.path, randomSong.name || randomSong.title);
+      }
+    } else {
+      this.currentIndex = (this.currentIndex + 1) % this.playlist.length;
+      const song = this.playlist[this.currentIndex];
+      if (song) {
+        this.play(song.path, song.name || song.title);
+      }
     }
   }
 
   toggleLoop() {
-    this.loopMode = this.loopMode === 'sequence' ? 'single' : 'sequence';
+    this.loopMode = this.loopMode === 'sequence' ? 'single' : 
+      this.loopMode === 'single' ?  'shuffle' : 'sequence';
     this.updateLoopBtn();
   }
 
   updateLoopBtn() {
-    if (this.el.loopBtn) {
-      this.el.loopBtn.textContent = this.loopMode === 'single' ? '↻' : '→';
+    const btn = this.el.loopBtn
+    if (btn) {
+      btn.classList.remove('loop-list');
+      btn.classList.remove('loop-one');
+      btn.classList.remove('loop-shuffle');
+      if (this.loopMode === 'sequence') {
+        btn.classList.add('loop-list');
+      } else if (this.loopMode === 'single') {
+        btn.classList.add('loop-one');
+      } else if (this.loopMode === 'shuffle') {
+        btn.classList.add('loop-shuffle');
+      }
     }
   }
 
@@ -638,102 +758,6 @@ class MusicPlayer {
   }
 }
 
-function handleSearchSelectAction(select, filePath, filename) {
-  const action = select.value;
-  select.value = '';
-  if (!action) return;
-  switch(action) {
-    case 'play':
-      playMusic(filePath, filename, 'select');
-      break;
-    case 'move':
-      showMoveModal(filePath);
-      break;
-    case 'link':
-      handleHardLinkClick({ stopPropagation: function(){} }, filePath, filename);
-      break;
-    case 'linkTo':
-      createHardLink(selectedLinkSource.path, filePath, filename);
-      break;
-    case 'rename':
-      showRenameModal(filename, filePath);
-      break;
-    case 'delete':
-      if (confirm('确定要删除 ' + filename + ' 吗？')) {
-        deleteFile(filePath);
-      }
-      break;
-  }
-}
-let selectedLinkSource = null;
-function handleHardLinkClick(e, filePath, filename) {
-  e.stopPropagation();
-  if (selectedLinkSource && selectedLinkSource.path === filePath) {
-    selectedLinkSource = null;
-    searchMusic();
-    return;
-  }
-  selectedLinkSource = { path: filePath, filename: filename };
-  searchMusic();
-}
-async function createHardLink(sourcePath, targetPath, targetFilename) {
-  try {
-    const res = await fetch('/song/hardlink', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sourcePath, targetPath, targetFilename })
-    });
-    const data = await res.json();
-    if (data.success) {
-      showToast('硬链接创建成功！');
-      selectedLinkSource = null;
-      searchMusic();
-    } else {
-      showToast('创建失败: ' + data.message);
-    }
-  } catch (err) {
-    showToast('创建失败: ' + err.message);
-  }
-}
-
-
-
-
-function handleDirSelectAction(select, filePath, filename, isDirectory) {
-  const action = select.value;
-  select.value = '';
-  if (!action) return;
-  switch(action) {
-    case 'play':
-      playMusic(filePath, filename, 'select');
-      break;
-    case 'move':
-      showMoveModal(filePath);
-      break;
-    case 'copy':
-      const nameWithoutExt = filename.replace(/\.[^.]+$/, '');
-      navigator.clipboard.writeText(nameWithoutExt).then(() => {
-        showToast('已复制文件名');
-      }).catch(() => {
-        showToast('复制失败');
-      });
-      break;
-    case 'rename':
-      showRenameModal(filename, filePath);
-      break;
-    case 'delete':
-      if (confirm('确定要删除' + (isDirectory ? '文件夹' : '文件') + ' ' + filename + ' 吗？')) {
-        deleteFile(filePath);
-      }
-      break;
-  }
-}
-
-
-
-
-
-
 let avbridgeLoading = false;
 function loadAvbridge() {
   return new Promise((resolve, reject) => {
@@ -776,17 +800,14 @@ function loadAvbridge() {
   });
 }
 
-
 const dirPlayerContainer = document.createElement('div');
 dirPlayerContainer.id = 'playerBar';
 document.body.appendChild(dirPlayerContainer);
-
 let dirPlayer = new MusicPlayer({
   container: dirPlayerContainer,
   showCloseBtn: true,
   isFixed: true
 });
-
 async function playMusic(filePath, filename, from) {
   dirPlayer.setPlaylist(currentDirAudioFiles);
   const index = currentDirAudioFiles.findIndex(item => item.path === filePath);
@@ -795,49 +816,100 @@ async function playMusic(filePath, filename, from) {
   }
   await dirPlayer.play(filePath, filename, from);
 }
-
 function togglePlay() {
   dirPlayer.togglePlay();
 }
-
 function seekTo() {
   dirPlayer.seekTo();
 }
-
 function closePlayer() {
   dirPlayer.close();
 }
 
-function formatTime(seconds) {
-  if (!seconds || seconds < 0) return '00:00';
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-}
 
-function showToast(message, duration = 2000) {
-  let toast = document.getElementById('toast');
-  if (!toast) {
-    toast = document.createElement('div');
-    toast.id = 'toast';
-    toast.className = 'toast';
-    document.body.appendChild(toast);
+
+
+
+
+let searchResults = [];
+let selectedLinkSource = null;
+let searchTimer = null;
+let isComposing = false;
+function handleSearchSelectAction(select, filePath, filename) {
+  const action = select.value;
+  select.value = '';
+  if (!action) return;
+  switch(action) {
+    case 'play':
+      playMusic(filePath, filename, 'select');
+      break;
+    case 'move':
+      showMoveModal(filePath);
+      break;
+
+    case 'rename':
+      showRenameModal(filename, filePath);
+      break;
+    case 'delete':
+      if (confirm('确定要删除 ' + filename + ' 吗？')) {
+        deleteFile(filePath);
+      }
+      break;
   }
-  toast.textContent = message;
-  toast.style.animation = 'toastFadeIn 0.3s ease forwards';
-  setTimeout(() => {
-    toast.style.animation = 'toastFadeOut 0.3s ease forwards';
-    setTimeout(() => toast.style.opacity = '0', 300);
-  }, duration);
 }
-
-function formatFileSize(bytes) {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+function handleHardLinkClick(filePath, filename) {
+  if (selectedLinkSource && selectedLinkSource.path === filePath) {//点了相同的文件就取消选择
+    selectedLinkSource = null;
+    updateHardLinkUI();
+    return;
+  }
+  selectedLinkSource = { path: filePath, filename: filename };
+  updateHardLinkUI();
 }
-
+function updateHardLinkUI() {
+  document.querySelectorAll('.action-link').forEach(btn => {
+    const path = btn.dataset.path;
+    if (selectedLinkSource) {
+      if (selectedLinkSource.path === path) {
+        btn.classList.remove('hidden');
+        btn.classList.add('selected');
+        btn.textContent = '取消';
+      } else {
+        btn.classList.add('hidden');
+      }
+    } else {
+      btn.classList.remove('hidden', 'selected');
+      btn.textContent = '链';
+    }
+  });
+  document.querySelectorAll('.action-target').forEach(btn => {
+    const path = btn.dataset.path;
+    if (selectedLinkSource && selectedLinkSource.path !== path) {
+      btn.classList.remove('hidden');
+    } else {
+      btn.classList.add('hidden');
+    }
+  });
+}
+async function createHardLink(sourcePath, targetPath, targetFilename) {
+  try {
+    const res = await fetch('/song/hardlink', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourcePath, targetPath, targetFilename })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('硬链接创建成功！');
+      selectedLinkSource = null;
+      updateHardLinkUI();
+    } else {
+      showToast('创建失败: ' + data.message);
+    }
+  } catch (err) {
+    showToast('创建失败: ' + err.message);
+  }
+}
 function clearSearch() {
   const input = document.getElementById('searchInput');
   input.value = '';
@@ -846,7 +918,6 @@ function clearSearch() {
   searchResults = [];
   input.focus();
 }
-
 function handleSearchInput(e) {
   const clearBtn = document.getElementById('searchClear');
   if (e.target.value) {
@@ -860,7 +931,6 @@ function handleSearchInput(e) {
     searchMusic();
   }, 800);
 }
-
 function handleSearchEnd() {
   isComposing = false;
   clearTimeout(searchTimer);
@@ -868,7 +938,6 @@ function handleSearchEnd() {
     searchMusic();
   }, 300);
 }
-
 async function searchMusic() {
   const keyword = document.getElementById('searchInput').value.trim();
   const resultDiv = document.getElementById('searchResult');
@@ -896,19 +965,22 @@ async function searchMusic() {
               <div class="name" ${item.size < 1048576 ? 'style="color:#e53935;"' : ''}>${escapeHtml(item.filename)} <span style="font-size:11px;color:#999;font-weight:normal;">(${formatFileSize(item.size)})</span></div>
               <div class="path" style="word-break:break-all;white-space:normal;font-size:11px;color:#888;">${escapeHtml(item.path)}</div>
             </div>
-            <div class="custom-select" onclick="event.stopPropagation()">
-              <select onchange="handleSearchSelectAction(this, '${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.filename)}')">
-                <option value="">操作</option>
-                <option value="play">播放</option>
-                <option value="move">移动</option>
-                <option value="link">${selectedLinkSource && selectedLinkSource.path === item.path ? '取消链接' : '链接'}</option>
-                ${selectedLinkSource && selectedLinkSource.path !== item.path ? `<option value="linkTo">目标</option>` : ''}
-                <option value="rename">重命名</option>
-                <option value="delete">删除</option>
-              </select>
+            <div class="list-actions" onclick="event.stopPropagation()">
+              <button class="action-btn action-link" data-path="${escapeHtml(item.path)}" data-filename="${escapeHtml(item.filename)}" onclick="handleHardLinkClick('${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.filename)}')">链</button>
+              <button class="action-btn action-target hidden" data-path="${escapeHtml(item.path)}" data-filename="${escapeHtml(item.filename)}" onclick="createHardLink('${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.filename)}')">到</button>
+              <div class="custom-select">
+                <select onchange="handleSearchSelectAction(this, '${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.filename)}')">
+                  <option value="">操作</option>
+                  <option value="play">播放</option>
+                  <option value="move">移动</option>
+                  <option value="rename">重命名</option>
+                  <option value="delete">删除</option>
+                </select>
+              </div>
             </div>
           </div>
         `).join('');
+        updateHardLinkUI();
       }
     } else {
       resultDiv.innerHTML = '<div class="empty">搜索失败: ' + data.message + '</div>';
@@ -917,7 +989,6 @@ async function searchMusic() {
     resultDiv.innerHTML = '<div class="empty">搜索失败: ' + err.message + '</div>';
   }
 }
-
 async function addToSongList(filename) {
   try {
     const res = await fetch('/song/add', {
@@ -935,7 +1006,6 @@ async function addToSongList(filename) {
     showToast('添加失败: ' + err.message);
   }
 }
-
 function addSong() {
   const filename = document.getElementById('searchInput').value.trim();
   if (!filename) {
@@ -945,12 +1015,15 @@ function addSong() {
   addToSongList(filename);
 }
 
+
+
+
+
+
 let playlistSongs = [];
 let playlistCurrentIndex = 0;
-let playlistLoopMode = 'sequence';
-
+//let playlistLoopMode = 'sequence';
 let playlistPlayer = null;
-
 async function showPlaylistModal() {
   const modal = document.getElementById('playlistModal');
   const listDiv = document.getElementById('playlistList');
@@ -983,14 +1056,12 @@ async function showPlaylistModal() {
     listDiv.innerHTML = '<div class="empty">加载播放列表失败</div>';
   }
 }
-
 function closePlaylistModal() {
   document.getElementById('playlistModal').classList.remove('active');
   if (playlistPlayer) {
     playlistPlayer.close();
   }
 }
-
 function renderPlaylist() {
   const listDiv = document.getElementById('playlistList');
   listDiv.innerHTML = playlistSongs.map((song, index) => `
@@ -1004,32 +1075,27 @@ function renderPlaylist() {
   `).join('');
   updatePlaylistPlayer();
 }
-
 function playPlaylistSong(index) {
   if (index < 0 || index >= playlistSongs.length) return;
   playlistCurrentIndex = index;
   playlistPlayer.setPlaylist(playlistSongs);
   playlistPlayer.currentIndex = index;
-  playlistPlayer.setLoopMode(playlistLoopMode);
+  //playlistPlayer.setLoopMode(playlistLoopMode);
   const song = playlistSongs[index];
   playlistPlayer.play(song.path, song.title);
   renderPlaylist();
 }
-
 function playlistSeekTo() {
   playlistPlayer.seekTo();
 }
-
 function playlistPrev() {
   if (!playlistPlayer) return;
   playlistPlayer.prev();
 }
-
 function playlistNext() {
   if (!playlistPlayer) return;
   playlistPlayer.next();
 }
-
 function playlistTogglePlay() {
   if (!playlistPlayer) return;
   if (!playlistPlayer.audio && playlistSongs.length > 0) {
@@ -1038,21 +1104,52 @@ function playlistTogglePlay() {
     playlistPlayer.togglePlay();
   }
 }
-
 function playlistToggleLoop() {
   if (!playlistPlayer) return;
   playlistPlayer.toggleLoop();
 }
-
 function updatePlaylistPlayer() {
   if (playlistSongs.length === 0) return;
   const song = playlistSongs[playlistCurrentIndex];
   if (playlistPlayer) {
     playlistPlayer.updateTitle(song.title);
-    playlistPlayer.setLoopMode(playlistLoopMode);
+    //playlistPlayer.setLoopMode(playlistLoopMode);
   }
 }
 
+
+
+
+
+function handleDirSelectAction(select, filePath, filename, isDirectory) {
+  const action = select.value;
+  select.value = '';
+  if (!action) return;
+  switch(action) {
+    case 'play':
+      playMusic(filePath, filename, 'select');
+      break;
+    case 'move':
+      showMoveModal(filePath);
+      break;
+    case 'copy':
+      const nameWithoutExt = filename.replace(/\.[^.]+$/, '');
+      navigator.clipboard.writeText(nameWithoutExt).then(() => {
+        showToast('已复制文件名');
+      }).catch(() => {
+        showToast('复制失败');
+      });
+      break;
+    case 'rename':
+      showRenameModal(filename, filePath);
+      break;
+    case 'delete':
+      if (confirm('确定要删除' + (isDirectory ? '文件夹' : '文件') + ' ' + filename + ' 吗？')) {
+        deleteFile(filePath);
+      }
+      break;
+  }
+}
 async function loadDir(dir = '') {
   const listDiv = document.getElementById('dirList');
   const navDiv = document.getElementById('dirNav');
@@ -1076,7 +1173,7 @@ async function loadDir(dir = '') {
       } else {
         listDiv.innerHTML = data.data.map(item => `
           <div class="dir-item ${item.isDirectory ? 'folder' : 'file'}" data-name="${escapeHtmlAttr(item.name)}" onclick="${item.isDirectory ? `loadDir('${escapeHtmlAttr(item.path)}')` : ``}">
-            ${isBatchSelectMode ? `<input type="checkbox" ${selectedFiles.has(item.path) ? 'checked' : ''} onclick="event.stopPropagation(); toggleFileSelect('${escapeHtmlAttr(item.path)}')" style="margin-right:8px;transform:scale(1.2);">` : ''}
+            ${isBatchSelectMode ? `<input type="checkbox" ${selectedMoveFiles.has(item.path) ? 'checked' : ''} onclick="event.stopPropagation(); toggleFileSelect('${escapeHtmlAttr(item.path)}')" style="margin-right:8px;transform:scale(1.2);">` : ''}
             <div class="item-info" ${!item.isDirectory ? `onclick="event.stopPropagation(); playMusic('${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.name)}')"` : ''}>
               <div class="name" ${!item.isDirectory && item.size < 1048576 ? 'style="color:#e53935;"' : ''}>${escapeHtml(item.name)} ${!item.isDirectory ? `<span style="font-size:11px;color:#999;font-weight:normal;">(${formatFileSize(item.size)})</span>` : ''}</div>
               <div class="path">${escapeHtml(item.path)}</div>
@@ -1114,7 +1211,6 @@ async function loadDir(dir = '') {
     listDiv.innerHTML = '<div class="empty">加载失败: ' + err.message + '</div>';
   }
 }
-
 function buildDirNav(dir) {
   if (!dir) {
     return '<a href="#" onclick="loadDir(\'\'); return false;">/</a>';
@@ -1129,6 +1225,55 @@ function buildDirNav(dir) {
   }
   return html;
 }
+
+
+
+
+
+
+let renamePath = '';
+function showRenameModal(currentName, filePath) {
+  renamePath = filePath;
+  document.getElementById('modalTitle').innerText = '重命名文件';
+  const input = document.getElementById('newNameInput');
+  input.value = currentName;
+  input.focus();
+  input.select();
+  document.getElementById('renameModal').classList.add('active');
+}
+function closeRenameModal() {
+  document.getElementById('renameModal').classList.remove('active');
+  document.getElementById('newNameInput').value = '';
+  renamePath = '';
+}
+async function confirmRename() {
+  const newName = document.getElementById('newNameInput').value.trim();
+  if (!newName) {
+    showToast('请输入新名称');
+    return;
+  }
+  try {
+    const res = await fetch('/song/rename-file', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: renamePath, newName })
+    });
+    const data = await res.json();
+    if (data.success) {
+      closeRenameModal();
+      focusedNames.set(currentDir, newName);
+      loadDir(currentDir);
+      searchMusic();
+    } else {
+      showToast('重命名失败: ' + data.message);
+    }
+  } catch (err) {
+    showToast('重命名失败: ' + err.message);
+  }
+}
+
+
+
 
 async function deleteFile(filePath) {
   try {
@@ -1148,49 +1293,6 @@ async function deleteFile(filePath) {
     showToast('删除失败: ' + err.message);
   }
 }
-
-function showRenameModal(currentName, filePath) {
-  renamePath = filePath;
-  document.getElementById('modalTitle').innerText = '重命名文件';
-  const input = document.getElementById('newNameInput');
-  input.value = currentName;
-  input.focus();
-  input.select();
-  document.getElementById('renameModal').classList.add('active');
-}
-
-function closeModal() {
-  document.getElementById('renameModal').classList.remove('active');
-  document.getElementById('newNameInput').value = '';
-  renamePath = '';
-}
-
-async function confirmRename() {
-  const newName = document.getElementById('newNameInput').value.trim();
-  if (!newName) {
-    showToast('请输入新名称');
-    return;
-  }
-  try {
-    const res = await fetch('/song/rename-file', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: renamePath, newName })
-    });
-    const data = await res.json();
-    if (data.success) {
-      closeModal();
-      focusedNames.set(currentDir, newName);
-      loadDir(currentDir);
-      searchMusic();
-    } else {
-      showToast('重命名失败: ' + data.message);
-    }
-  } catch (err) {
-    showToast('重命名失败: ' + err.message);
-  }
-}
-
 function handleFileUpload(input) {
   const files = input.files;
   if (!files || files.length === 0) return;
@@ -1222,18 +1324,18 @@ function handleFileUpload(input) {
   });
 }
 
+
+
 function showNewFolderModal() {
   const input = document.getElementById('newFolderNameInput');
   input.value = '';
   input.focus();
   document.getElementById('newFolderModal').classList.add('active');
 }
-
 function closeNewFolderModal() {
   document.getElementById('newFolderModal').classList.remove('active');
   document.getElementById('newFolderNameInput').value = '';
 }
-
 async function createNewFolder() {
   const name = document.getElementById('newFolderNameInput').value.trim();
   if (!name) {
@@ -1258,274 +1360,253 @@ async function createNewFolder() {
   }
 }
 
-function escapeHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-function escapeJsString(str) {
-  return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-}
-function escapeHtmlAttr(str) {
-  return escapeHtml(escapeJsString(str));
+
+
+
+
+
+
+
+
+// 通用目录树选择器：渲染 / 展开收起 / 选中，展开状态由 DOM 驱动（无需外部集合）
+// 内部渲染完整的 modal 结构，支持参数化标题、描述、按钮文字和回调
+class DirTreePicker {
+  constructor() {
+    this.modalId = 'dirPickerModal';
+    this.treeId = 'dirPickerTree';
+    this.selectedId = 'dirPickerSelected';
+    this.titleId = 'dirPickerTitle';
+    this.descId = 'dirPickerDesc';
+    this.confirmBtnId = 'dirPickerConfirm';
+    this.cancelBtnId = 'dirPickerCancel';
+    this.selectedDir = null;
+    this.defaultExpand = null;
+    this.scrollInto = false;
+    this.onConfirm = null;
+    this.onCancel = null;
+    this.renderModalIfNeeded();
+  }
+
+  renderModalIfNeeded() {
+    if (document.getElementById(this.modalId)) return;
+    const modalHtml = `
+      <div class="modal" id="${this.modalId}">
+        <div class="modal-content">
+          <h3 id="${this.titleId}">选择目标文件夹</h3>
+          <p style="font-size:12px;color:#666;margin-bottom:10px;" id="${this.descId}">请选择目标文件夹</p>
+          <div style="border: 1px solid #ddd; border-radius: 6px; padding: 8px;" id="${this.treeId}"></div>
+          <div style="margin-top:8px;font-size:12px;color:#888;" id="${this.selectedId}">未选择</div>
+          <div class="modal-actions">
+            <button class="btn btn-cancel" id="${this.cancelBtnId}">取消</button>
+            <button class="btn btn-primary" id="${this.confirmBtnId}">确定</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    document.getElementById(this.cancelBtnId).addEventListener('click', () => this.close());
+    document.getElementById(this.confirmBtnId).addEventListener('click', () => this.confirm());
+  }
+
+  async open({ title, description, onConfirm, onCancel, defaultExpand, scrollInto }) {
+    this.selectedDir = null;
+    this.onConfirm = onConfirm || null;
+    this.onCancel = onCancel || null;
+    this.defaultExpand = defaultExpand || null;
+    this.scrollInto = !!scrollInto;
+
+    document.getElementById(this.titleId).textContent = title || '选择目标文件夹';
+    document.getElementById(this.descId).textContent = description || '请选择目标文件夹';
+    document.getElementById(this.selectedId).textContent = '未选择';
+    document.getElementById(this.modalId).classList.add('active');
+
+    await this.render('');
+    if (this.defaultExpand) {
+      await this.expand(this.defaultExpand);
+      if (this.scrollInto) {
+        const toggle = this.findToggle(this.defaultExpand);
+        if (toggle) toggle.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+  }
+
+  close() {
+    document.getElementById(this.modalId).classList.remove('active');
+    if (this.onCancel) this.onCancel();
+  }
+
+  async confirm() {
+    if (this.onConfirm) await this.onConfirm(this.selectedDir);
+  }
+
+  async render(dir) {
+    const treeDiv = document.getElementById(this.treeId);
+    if (!treeDiv) return;
+    try {
+      let html = '';
+      if (!dir) {
+        html += `<div style="padding:6px;cursor:pointer;color:#2196F3;font-weight:500;" onclick="dirPicker.select('')">📁 music (根目录)</div>`;
+      }
+      html += await this.buildChildrenHtml(dir);
+      treeDiv.innerHTML = html;
+    } catch (err) {
+      showToast('加载目录失败: ' + err.message);
+    }
+  }
+
+  async buildChildrenHtml(dir) {
+    const res = await fetch('/song/dir?dir=' + encodeURIComponent(dir));
+    const data = await res.json();
+    if (!data.success) return '';
+    const folders = data.data.filter(item => item.isDirectory);
+    const depth = dir ? dir.split('/').length : 0;
+    const leftPad = dir ? (20 + depth * 16) : 6;
+    let html = '';
+    for (const folder of folders) {
+      const attrPath = escapeHtmlAttr(folder.path);
+      const dataPath = escapeHtml(folder.path);
+      html += `<div style="padding:4px 6px 4px ${leftPad}px;">`;
+      html += `<span class="dt-toggle" data-dir="${dataPath}" style="cursor:pointer;color:#666;margin-right:4px;" onclick="dirPicker.toggle('${attrPath}')">▶</span>`;
+      html += `<span style="cursor:pointer;" onclick="dirPicker.select('${attrPath}')">📁 ${escapeHtml(folder.name)}</span>`;
+      html += `</div>`;
+      html += `<div class="dt-sub" data-dir="${dataPath}" style="display:none;"></div>`;
+    }
+    return html;
+  }
+
+  findToggle(dir) {
+    const els = document.querySelectorAll('#' + this.treeId + ' .dt-toggle');
+    for (const el of els) {
+      if (el.dataset.dir === dir) return el;
+    }
+    return null;
+  }
+
+  findSubtree(dir) {
+    const els = document.querySelectorAll('#' + this.treeId + ' .dt-sub');
+    for (const el of els) {
+      if (el.dataset.dir === dir) return el;
+    }
+    return null;
+  }
+
+  async expand(dir) {
+    try {
+      const toggleEl = this.findToggle(dir);
+      const subEl = this.findSubtree(dir);
+      if (toggleEl) toggleEl.textContent = '▼';
+      if (subEl) {
+        if (!subEl.dataset.loaded) {
+          subEl.innerHTML = await this.buildChildrenHtml(dir);
+          subEl.dataset.loaded = '1';
+        }
+        subEl.style.display = 'block';
+      }
+    } catch (err) {
+    }
+  }
+
+  async toggle(dir) {
+    const toggleEl = this.findToggle(dir);
+    const isExpanded = toggleEl && toggleEl.textContent === '▼';
+    if (isExpanded) {
+      if (toggleEl) toggleEl.textContent = '▶';
+      const subEl = this.findSubtree(dir);
+      if (subEl) subEl.style.display = 'none';
+    } else {
+      await this.expand(dir);
+    }
+  }
+
+  select(dir) {
+    this.selectedDir = dir;
+    const el = document.getElementById(this.selectedId);
+    if (el) el.textContent = '已选择: ' + (dir || 'music (根目录)');
+  }
 }
 
-let symlinkSelectedDir = null;
-let symlinkExpandedDirs = new Set();
-
-let moveSourcePath = null;
-let moveSelectedDir = null;
-let moveExpandedDirs = new Set();
+const dirPicker = new DirTreePicker();
 
 async function showSymlinkModal() {
   if (!currentDir) {
     showToast('请先进入一个文件夹');
     return;
   }
-  symlinkSelectedDir = null;
-  symlinkExpandedDirs = new Set(['country']);
-  document.getElementById('symlinkSelected').textContent = '未选择';
-  document.getElementById('symlinkModal').classList.add('active');
-  await loadSymlinkDirTree('');
-  setTimeout(() => {
-    const countrySpan = document.querySelector('span[onclick*="selectSymlinkDir(\'country\'"]');
-    if (countrySpan) {
-      countrySpan.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, 100);
-}
-
-function closeSymlinkModal() {
-  document.getElementById('symlinkModal').classList.remove('active');
-}
-
-async function loadSymlinkDirTree(dir) {
-  const treeDiv = document.getElementById('symlinkDirTree');
-  try {
-    const res = await fetch('/song/dir?dir=' + encodeURIComponent(dir));
-    const data = await res.json();
-    if (!data.success) return;
-
-    const folders = data.data.filter(item => item.isDirectory);
-    let html = '';
-
-    if (!dir) {
-      html += `<div style="padding:6px;cursor:pointer;color:#2196F3;font-weight:500;" onclick="selectSymlinkDir('')">📁 music (根目录)</div>`;
-    }
-
-    const depth = dir ? dir.split('/').length : 0;
-    const indent = '  '.repeat(depth + 1);
-
-    for (const folder of folders) {
-      const isExpanded = symlinkExpandedDirs.has(folder.path);
-      html += `<div style="padding:4px 6px;">`;
-      html += `<span style="cursor:pointer;color:#666;margin-right:4px;" onclick="toggleSymlinkDir('${escapeHtmlAttr(folder.path)}')">${isExpanded ? '▼' : '▶'}</span>`;
-      html += `<span style="cursor:pointer;" onclick="selectSymlinkDir('${escapeHtmlAttr(folder.path)}')">📁 ${escapeHtml(folder.name)}</span>`;
-      html += `</div>`;
-
-      if (isExpanded) {
-        html += `<div id="symlink-sub-${escapeHtmlAttr(folder.path).replace(/\//g, '_')}">`;
-        html += await loadSubDirs(folder.path);
-        html += `</div>`;
+  await dirPicker.open({
+    title: '选择目标文件夹',
+    description: '将在所选文件夹下创建指向当前目录的软链接',
+    defaultExpand: 'country',
+    scrollInto: true,
+    onConfirm: async (targetDir) => {
+      if (targetDir === null) {
+        showToast('请选择目标文件夹');
+        return;
+      }
+      if (targetDir === currentDir) {
+        showToast('不能选择当前目录');
+        return;
+      }
+      try {
+        const res = await fetch('/song/symlink', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source: currentDir, target: targetDir })
+        });
+        const data = await res.json();
+        if (data.success) {
+          dirPicker.close();
+          showToast('软链接创建成功');
+        } else {
+          showToast('创建失败: ' + data.message);
+        }
+      } catch (err) {
+        showToast('创建失败: ' + err.message);
       }
     }
-
-    treeDiv.innerHTML = html;
-  } catch (err) {
-    showToast('加载目录失败: ' + err.message);
-  }
+  });
 }
 
-async function loadSubDirs(dir) {
-  try {
-    const res = await fetch('/song/dir?dir=' + encodeURIComponent(dir));
-    const data = await res.json();
-    if (!data.success) return '';
 
-    const folders = data.data.filter(item => item.isDirectory);
-    let html = '';
-    const depth = dir.split('/').length;
-    const indent = '  '.repeat(depth + 1);
-
-    for (const folder of folders) {
-      const isExpanded = symlinkExpandedDirs.has(folder.path);
-      html += `<div style="padding:4px 6px 4px ${20 + depth * 16}px;">`;
-      html += `<span style="cursor:pointer;color:#666;margin-right:4px;" onclick="toggleSymlinkDir('${escapeHtmlAttr(folder.path)}')">${isExpanded ? '▼' : '▶'}</span>`;
-      html += `<span style="cursor:pointer;" onclick="selectSymlinkDir('${escapeHtmlAttr(folder.path)}')">📁 ${escapeHtml(folder.name)}</span>`;
-      html += `</div>`;
-
-      if (isExpanded) {
-        html += await loadSubDirs(folder.path);
+function showMoveModal(moveSourcePath) {
+  dirPicker.open({
+    title: '选择目标文件夹',
+    description: '将文件移动到所选文件夹',
+    onConfirm: async (targetDir) => {
+      if (!moveSourcePath) {
+        showToast('请选择要移动的文件');
+        return;
+      }
+      if (targetDir === null) {
+        showToast('请选择目标文件夹');
+        return;
+      }
+      try {
+        const res = await fetch('/song/move', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source: moveSourcePath, target: targetDir })
+        });
+        const data = await res.json();
+        if (data.success) {
+          dirPicker.close();
+          showToast('移动成功');
+          loadDir(currentDir);
+        } else {
+          showToast('移动失败: ' + data.message);
+        }
+      } catch (err) {
+        showToast('移动失败: ' + err.message);
       }
     }
-    return html;
-  } catch (err) {
-    return '';
-  }
+  });
 }
 
-async function toggleSymlinkDir(dir) {
-  if (symlinkExpandedDirs.has(dir)) {
-    symlinkExpandedDirs.delete(dir);
-  } else {
-    symlinkExpandedDirs.add(dir);
-  }
-  await loadSymlinkDirTree('');
-}
 
-function selectSymlinkDir(dir) {
-  symlinkSelectedDir = dir;
-  const display = dir || 'music (根目录)';
-  document.getElementById('symlinkSelected').textContent = '已选择: ' + display;
-}
-
-async function createSymlink() {
-  if (symlinkSelectedDir === null) {
-    showToast('请选择目标文件夹');
-    return;
-  }
-  if (symlinkSelectedDir === currentDir) {
-    showToast('不能选择当前目录');
-    return;
-  }
-  try {
-    const res = await fetch('/song/symlink', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: currentDir, target: symlinkSelectedDir })
-    });
-    const data = await res.json();
-    if (data.success) {
-      closeSymlinkModal();
-      showToast('软链接创建成功');
-    } else {
-      showToast('创建失败: ' + data.message);
-    }
-  } catch (err) {
-    showToast('创建失败: ' + err.message);
-  }
-}
-
-function showMoveModal(filePath) {
-  moveSourcePath = filePath;
-  moveSelectedDir = null;
-  moveExpandedDirs = new Set();
-  document.getElementById('moveSelected').textContent = '未选择';
-  document.getElementById('moveModal').classList.add('active');
-  loadMoveDirTree('');
-}
-
-function closeMoveModal() {
-  document.getElementById('moveModal').classList.remove('active');
-}
-
-async function loadMoveDirTree(dir) {
-  const treeDiv = document.getElementById('moveDirTree');
-  try {
-    const res = await fetch('/song/dir?dir=' + encodeURIComponent(dir));
-    const data = await res.json();
-    if (!data.success) return;
-
-    const folders = data.data.filter(item => item.isDirectory);
-    let html = '';
-
-    if (!dir) {
-      html += `<div style="padding:6px;cursor:pointer;color:#2196F3;font-weight:500;" onclick="selectMoveDir('')">📁 music (根目录)</div>`;
-    }
-
-    const depth = dir ? dir.split('/').length : 0;
-
-    for (const folder of folders) {
-      const isExpanded = moveExpandedDirs.has(folder.path);
-      html += `<div style="padding:4px 6px;">`;
-      html += `<span style="cursor:pointer;color:#666;margin-right:4px;" onclick="toggleMoveDir('${escapeHtmlAttr(folder.path)}')">${isExpanded ? '▼' : '▶'}</span>`;
-      html += `<span style="cursor:pointer;" onclick="selectMoveDir('${escapeHtmlAttr(folder.path)}')">📁 ${escapeHtml(folder.name)}</span>`;
-      html += `</div>`;
-
-      if (isExpanded) {
-        html += `<div id="move-sub-${escapeHtmlAttr(folder.path).replace(/\//g, '_')}">`;
-        html += await loadMoveSubDirs(folder.path);
-        html += `</div>`;
-      }
-    }
-
-    treeDiv.innerHTML = html;
-  } catch (err) {
-    showToast('加载目录失败: ' + err.message);
-  }
-}
-
-async function loadMoveSubDirs(dir) {
-  try {
-    const res = await fetch('/song/dir?dir=' + encodeURIComponent(dir));
-    const data = await res.json();
-    if (!data.success) return '';
-
-    const folders = data.data.filter(item => item.isDirectory);
-    let html = '';
-    const depth = dir.split('/').length;
-
-    for (const folder of folders) {
-      const isExpanded = moveExpandedDirs.has(folder.path);
-      html += `<div style="padding:4px 6px 4px ${20 + depth * 16}px;">`;
-      html += `<span style="cursor:pointer;color:#666;margin-right:4px;" onclick="toggleMoveDir('${escapeHtmlAttr(folder.path)}')">${isExpanded ? '▼' : '▶'}</span>`;
-      html += `<span style="cursor:pointer;" onclick="selectMoveDir('${escapeHtmlAttr(folder.path)}')">📁 ${escapeHtml(folder.name)}</span>`;
-      html += `</div>`;
-
-      if (isExpanded) {
-        html += await loadMoveSubDirs(folder.path);
-      }
-    }
-    return html;
-  } catch (err) {
-    return '';
-  }
-}
-
-async function toggleMoveDir(dir) {
-  if (moveExpandedDirs.has(dir)) {
-    moveExpandedDirs.delete(dir);
-  } else {
-    moveExpandedDirs.add(dir);
-  }
-  await loadMoveDirTree('');
-}
-
-function selectMoveDir(dir) {
-  moveSelectedDir = dir;
-  const display = dir || 'music (根目录)';
-  document.getElementById('moveSelected').textContent = '已选择: ' + display;
-}
-
-async function doMove() {
-  if (!moveSourcePath) {
-    showToast('请选择要移动的文件');
-    return;
-  }
-  if (moveSelectedDir === null) {
-    showToast('请选择目标文件夹');
-    return;
-  }
-  try {
-    const res = await fetch('/song/move', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: moveSourcePath, target: moveSelectedDir })
-    });
-    const data = await res.json();
-    if (data.success) {
-      closeMoveModal();
-      showToast('移动成功');
-      loadDir(currentDir);
-    } else {
-      showToast('移动失败: ' + data.message);
-    }
-  } catch (err) {
-    showToast('移动失败: ' + err.message);
-  }
-}
-
+let isBatchSelectMode = false;
+let selectedMoveFiles = new Set();
 function toggleBatchSelect() {
   if (isBatchSelectMode) {
-    if (selectedFiles.size > 0) {
+    if (selectedMoveFiles.size > 0) {
       startBatchMove();
       return;
     }
@@ -1533,148 +1614,58 @@ function toggleBatchSelect() {
     return;
   }
   isBatchSelectMode = true;
-  selectedFiles.clear();
+  selectedMoveFiles.clear();
   document.getElementById('batchMoveBtn').textContent = '✓';
   document.getElementById('batchCancelBtn').style.display = 'block';
   loadDir(currentDir);
 }
-
 function cancelBatchSelect() {
   isBatchSelectMode = false;
-  selectedFiles.clear();
+  selectedMoveFiles.clear();
   document.getElementById('batchMoveBtn').textContent = '→';
   document.getElementById('batchCancelBtn').style.display = 'none';
   loadDir(currentDir);
 }
-
 function toggleFileSelect(filePath) {
   if (!isBatchSelectMode) return;
-  if (selectedFiles.has(filePath)) {
-    selectedFiles.delete(filePath);
+  if (selectedMoveFiles.has(filePath)) {
+    selectedMoveFiles.delete(filePath);
   } else {
-    selectedFiles.add(filePath);
+    selectedMoveFiles.add(filePath);
   }
 }
-
-let batchMoveSelectedDir = null;
-let batchMoveExpandedDirs = new Set();
-
 function startBatchMove() {
-  batchMoveSelectedDir = null;
-  batchMoveExpandedDirs = new Set();
-  document.getElementById('batchMoveSelected').textContent = '未选择';
-  document.getElementById('batchMoveModal').classList.add('active');
-  loadBatchMoveDirTree('');
-}
-
-function closeBatchMoveModal() {
-  document.getElementById('batchMoveModal').classList.remove('active');
-}
-
-async function loadBatchMoveDirTree(dir) {
-  const treeDiv = document.getElementById('batchMoveDirTree');
-  try {
-    const res = await fetch('/song/dir?dir=' + encodeURIComponent(dir));
-    const data = await res.json();
-    if (!data.success) return;
-
-    const folders = data.data.filter(item => item.isDirectory);
-    let html = '';
-
-    if (!dir) {
-      html += `<div style="padding:6px;cursor:pointer;color:#2196F3;font-weight:500;" onclick="selectBatchMoveDir('')">📁 music (根目录)</div>`;
-    }
-
-    const depth = dir ? dir.split('/').length : 0;
-
-    for (const folder of folders) {
-      const isExpanded = batchMoveExpandedDirs.has(folder.path);
-      html += `<div style="padding:4px 6px;">`;
-      html += `<span style="cursor:pointer;color:#666;margin-right:4px;" onclick="toggleBatchMoveDir('${escapeHtmlAttr(folder.path)}')">${isExpanded ? '▼' : '▶'}</span>`;
-      html += `<span style="cursor:pointer;" onclick="selectBatchMoveDir('${escapeHtmlAttr(folder.path)}')">📁 ${escapeHtml(folder.name)}</span>`;
-      html += `</div>`;
-
-      if (isExpanded) {
-        html += `<div id="batchMove-sub-${escapeHtmlAttr(folder.path).replace(/\//g, '_')}">`;
-        html += await loadBatchMoveSubDirs(folder.path);
-        html += `</div>`;
+  dirPicker.open({
+    title: '选择目标文件夹',
+    description: '将选中的文件批量移动到所选文件夹',
+    onConfirm: async (targetDir) => {
+      if (selectedMoveFiles.size === 0) {
+        showToast('请选择要移动的文件');
+        return;
+      }
+      if (targetDir === null) {
+        showToast('请选择目标文件夹');
+        return;
+      }
+      try {
+        const res = await fetch('/song/batch-move', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sources: Array.from(selectedMoveFiles), target: targetDir })
+        });
+        const data = await res.json();
+        if (data.success) {
+          dirPicker.close();
+          cancelBatchSelect();
+          showToast('批量移动成功');
+        } else {
+          showToast('移动失败: ' + data.message);
+        }
+      } catch (err) {
+        showToast('移动失败: ' + err.message);
       }
     }
-
-    treeDiv.innerHTML = html;
-  } catch (err) {
-    showToast('加载目录失败: ' + err.message);
-  }
-}
-
-async function loadBatchMoveSubDirs(dir) {
-  try {
-    const res = await fetch('/song/dir?dir=' + encodeURIComponent(dir));
-    const data = await res.json();
-    if (!data.success) return '';
-
-    const folders = data.data.filter(item => item.isDirectory);
-    let html = '';
-    const depth = dir.split('/').length;
-
-    for (const folder of folders) {
-      const isExpanded = batchMoveExpandedDirs.has(folder.path);
-      html += `<div style="padding:4px 6px 4px ${20 + depth * 16}px;">`;
-      html += `<span style="cursor:pointer;color:#666;margin-right:4px;" onclick="toggleBatchMoveDir('${escapeHtmlAttr(folder.path)}')">${isExpanded ? '▼' : '▶'}</span>`;
-      html += `<span style="cursor:pointer;" onclick="selectBatchMoveDir('${escapeHtmlAttr(folder.path)}')">📁 ${escapeHtml(folder.name)}</span>`;
-      html += `</div>`;
-
-      if (isExpanded) {
-        html += await loadBatchMoveSubDirs(folder.path);
-      }
-    }
-    return html;
-  } catch (err) {
-    return '';
-  }
-}
-
-async function toggleBatchMoveDir(dir) {
-  if (batchMoveExpandedDirs.has(dir)) {
-    batchMoveExpandedDirs.delete(dir);
-  } else {
-    batchMoveExpandedDirs.add(dir);
-  }
-  await loadBatchMoveDirTree('');
-}
-
-function selectBatchMoveDir(dir) {
-  batchMoveSelectedDir = dir;
-  const display = dir || 'music (根目录)';
-  document.getElementById('batchMoveSelected').textContent = '已选择: ' + display;
-}
-
-async function doBatchMove() {
-  if (selectedFiles.size === 0) {
-    showToast('请选择要移动的文件');
-    return;
-  }
-  if (batchMoveSelectedDir === null) {
-    showToast('请选择目标文件夹');
-    return;
-  }
-  try {
-    const res = await fetch('/song/batch-move', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sources: Array.from(selectedFiles), target: batchMoveSelectedDir })
-    });
-    const data = await res.json();
-    if (data.success) {
-      closeBatchMoveModal();
-      cancelBatchSelect();
-      showToast('批量移动成功');
-    } else {
-      showToast('移动失败: ' + data.message);
-    }
-  } catch (err) {
-    showToast('移动失败: ' + err.message);
-  }
+  });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
