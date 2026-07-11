@@ -1468,7 +1468,7 @@ class DirTreePicker {
     try {
       let html = '';
       if (!dir) {
-        html += `<div style="padding:6px;cursor:pointer;color:#2196F3;font-weight:500;" onclick="dirPicker.select('')">📁 music (根目录)</div>`;
+        html += `<div class="dt-item" data-dir="" style="padding:6px;cursor:pointer;" onclick="dirPicker.select('')"><span class="dt-name">📁 music (根目录)</span></div>`;
       }
       html += await this.buildChildrenHtml(dir);
       treeDiv.innerHTML = html;
@@ -1488,9 +1488,9 @@ class DirTreePicker {
     for (const folder of folders) {
       const attrPath = escapeHtmlAttr(folder.path);
       const dataPath = escapeHtml(folder.path);
-      html += `<div style="padding:4px 6px 4px ${leftPad}px;">`;
-      html += `<span class="dt-toggle" data-dir="${dataPath}" style="cursor:pointer;color:#666;margin-right:4px;" onclick="dirPicker.toggle('${attrPath}')">▶</span>`;
-      html += `<span style="cursor:pointer;" onclick="dirPicker.select('${attrPath}')">📁 ${escapeHtml(folder.name)}</span>`;
+      html += `<div class="dt-item" data-dir="${dataPath}" style="padding:4px 6px 4px ${leftPad}px;cursor:pointer;" onclick="dirPicker.select('${attrPath}')">`;
+      html += `<span class="dt-toggle" data-dir="${dataPath}" style="cursor:pointer;color:#666;margin-right:4px;" onclick="event.stopPropagation();dirPicker.toggle('${attrPath}')">▶</span>`;
+      html += `<span class="dt-name">📁 ${escapeHtml(folder.name)}</span>`;
       html += `</div>`;
       html += `<div class="dt-sub" data-dir="${dataPath}" style="display:none;"></div>`;
     }
@@ -1545,6 +1545,14 @@ class DirTreePicker {
     this.selectedDir = dir;
     const el = document.getElementById(this.selectedId);
     if (el) el.textContent = '已选择: ' + (dir || 'music (根目录)');
+
+    document.querySelectorAll('#' + this.treeId + ' .dt-item').forEach(item => {
+      item.classList.remove('selected');
+    });
+    const selectedItem = document.querySelector('#' + this.treeId + ' .dt-item[data-dir="' + escapeHtml(dir) + '"]');
+    if (selectedItem) {
+      selectedItem.classList.add('selected');
+    }
   }
 }
 
