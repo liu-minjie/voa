@@ -225,7 +225,7 @@ class MusicPlayer {
   }
 
   setPlaylist(playlist) {
-    this.playlist = playlist;
+    this.playlist = JSON.parse(JSON.stringify(playlist));
     this.currentIndex = 0;
   }
 
