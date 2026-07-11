@@ -1204,7 +1204,7 @@ async function loadDir(dir = '') {
                 <option value="delete">删除</option>
               </select>
             </div>
-            <div class="desktop-actions">
+            <div class="desktop-actions" onclick="event.stopPropagation()">
               ${!item.isDirectory ? `<button class="btn btn-sm btn-play" onclick="playMusic('${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.name)}', 'select')">播放</button>` : ''}
               <button class="btn btn-sm btn-info" onclick="showMoveModal('${escapeHtmlAttr(item.path)}')">移动</button>
               <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${escapeHtmlAttr(item.name).replace(/\.[^.]+$/, '')}').then(()=>showToast('已复制文件名')).catch(()=>showToast('复制失败'))">复制</button>
