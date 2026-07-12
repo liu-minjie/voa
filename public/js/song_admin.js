@@ -918,11 +918,18 @@ async function createHardLink(sourcePath, targetPath, targetFilename) {
     showToast('创建失败: ' + err.message);
   }
 }
+function renderEmptySearch() {
+  return `
+    <div class="empty-actions">
+      <button class="btn btn-primary" onclick="window.location.href='/todo'">Todo</button>
+    </div>
+  `;
+}
 function clearSearch() {
   const input = document.getElementById('searchInput');
   input.value = '';
   document.getElementById('searchClear').classList.remove('show');
-  document.getElementById('searchResult').innerHTML = '<div class="empty">输入关键词搜索音乐文件</div>';
+  document.getElementById('searchResult').innerHTML = renderEmptySearch();
   searchResults = [];
   input.focus();
 }
@@ -951,7 +958,7 @@ async function searchMusic() {
   const resultDiv = document.getElementById('searchResult');
 
   if (!keyword) {
-    resultDiv.innerHTML = '<div class="empty">输入关键词搜索音乐文件</div>';
+    resultDiv.innerHTML = renderEmptySearch();
     searchResults = [];
     return;
   }
@@ -1701,4 +1708,5 @@ function startBatchMove() {
 
 document.addEventListener('DOMContentLoaded', () => {
   loadDir();
+  document.getElementById('searchResult').innerHTML = renderEmptySearch();
 });
