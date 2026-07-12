@@ -48,6 +48,11 @@
     .form-group input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; outline: none; }
     .form-group input:focus { border-color: #2196F3; }
     .selector-wrapper { position: relative; }
+    .input-wrapper { position: relative; }
+    .clear-btn { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #999; font-size: 18px; line-height: 1; }
+    .clear-btn:hover { color: #666; }
+    .form-group input[type="date"] { box-sizing: border-box; height: 38px; }
+    .form-group .clear-btn.inline { position: static; transform: none; padding: 10px 8px; cursor: pointer; }
     .dropdown { position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: white; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-height: 160px; overflow-y: auto; z-index: 300; display: none; }
     .dropdown.show { display: block; }
     .dropdown-option { padding: 10px 12px; cursor: pointer; font-size: 14px; }
@@ -103,18 +108,18 @@
         <div class="form-group">
           <label>分类</label>
           <div class="selector-wrapper">
-            <input type="text" id="modalCategory" placeholder="选择或输入分类" onfocus="showCategoryDropdown()" onblur="setTimeout(hideCategoryDropdown, 200)" oninput="filterModalCategories()">
+            <input type="text" id="modalCategory" placeholder="选择或输入分类" autocomplete="off" autocapitalize="off" onfocus="showCategoryDropdown()" onblur="setTimeout(hideCategoryDropdown, 200)" oninput="filterModalCategories()">
             <div class="dropdown" id="categoryDropdown"></div>
           </div>
         </div>
         <div class="form-group">
           <label>标签</label>
           <div class="tag-list" id="modalTags"></div>
-          <div class="tag-input-wrapper">
-            <input type="text" id="modalTagInput" placeholder="输入标签后回车" onfocus="showTagDropdown()" onblur="setTimeout(hideTagDropdown, 200)" oninput="filterModalTags()" onkeydown="if(event.key==='Enter'){event.preventDefault();addModalTag()}">
+          <div class="tag-input-wrapper selector-wrapper">
+            <input type="text" id="modalTagInput" placeholder="输入标签后回车" autocomplete="off" autocapitalize="off" onfocus="showTagDropdown()" onblur="setTimeout(hideTagDropdown, 200)" oninput="filterModalTags()" onkeydown="if(event.key==='Enter'){event.preventDefault();addModalTag()}">
             <button onclick="addModalTag()">添加</button>
+            <div class="dropdown" id="tagDropdown"></div>
           </div>
-          <div class="dropdown" id="tagDropdown"></div>
         </div>
       </div>
       <div class="modal-actions">
@@ -133,26 +138,36 @@
       <div class="modal-body">
         <div class="form-group">
           <label>关键字</label>
-          <input type="text" id="searchKeyword" placeholder="搜索内容...">
+          <div class="input-wrapper">
+            <input type="text" id="searchKeyword" placeholder="搜索内容...">
+            <span class="clear-btn" onclick="clearSearchField('searchKeyword')">×</span>
+          </div>
         </div>
         <div class="form-group">
           <label>日期区间</label>
-          <div style="display: flex; gap: 8px;">
-            <input type="date" id="searchStartDate">
-            <input type="date" id="searchEndDate">
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <div class="input-wrapper" style="flex: 1; min-width: 120px;">
+              <input type="date" id="searchStartDate" onchange="onStartDateChange()">
+            </div>
+            <div class="input-wrapper" style="flex: 1; min-width: 120px;">
+              <input type="date" id="searchEndDate">
+            </div>
+            <span class="clear-btn inline" onclick="clearDateRange()">×</span>
           </div>
         </div>
         <div class="form-group">
           <label>分类</label>
           <div class="selector-wrapper">
-            <input type="text" id="searchCategory" placeholder="选择分类" onfocus="showSearchCategoryDropdown()" onblur="setTimeout(hideSearchCategoryDropdown, 200)" oninput="filterSearchCategories()">
+            <input type="text" id="searchCategory" placeholder="选择分类" autocomplete="off" autocapitalize="off" onfocus="showSearchCategoryDropdown()" onblur="setTimeout(hideSearchCategoryDropdown, 200)" oninput="filterSearchCategories()">
+            <span class="clear-btn" onclick="clearSearchField('searchCategory')">×</span>
             <div class="dropdown" id="searchCategoryDropdown"></div>
           </div>
         </div>
         <div class="form-group">
           <label>标签</label>
           <div class="selector-wrapper">
-            <input type="text" id="searchTag" placeholder="选择标签" onfocus="showSearchTagDropdown()" onblur="setTimeout(hideSearchTagDropdown, 200)" oninput="filterSearchTags()">
+            <input type="text" id="searchTag" placeholder="选择标签" autocomplete="off" autocapitalize="off" onfocus="showSearchTagDropdown()" onblur="setTimeout(hideSearchTagDropdown, 200)" oninput="filterSearchTags()">
+            <span class="clear-btn" onclick="clearSearchField('searchTag')">×</span>
             <div class="dropdown" id="searchTagDropdown"></div>
           </div>
         </div>
@@ -221,7 +236,7 @@
         const res = await fetch('/todo/categories');
         const data = await res.json();
         if (data.success) {
-          categories = data.data;
+          categories = [...new Set((data.data || []).map(c => c.name))];
         }
       } catch (err) {
         console.error('加载分类失败:', err);
@@ -233,7 +248,7 @@
         const res = await fetch('/todo/tags');
         const data = await res.json();
         if (data.success) {
-          tags = data.data;
+          tags = [...new Set((data.data || []).map(t => t.name))];
         }
       } catch (err) {
         console.error('加载标签失败:', err);
@@ -271,7 +286,7 @@
       closeSearchModal();
     }
 
-    function doSearch() {
+    function doSearch(close = true) {
       searchParams.keyword = document.getElementById('searchKeyword').value.trim();
       searchParams.startDate = document.getElementById('searchStartDate').value;
       searchParams.endDate = document.getElementById('searchEndDate').value;
@@ -280,7 +295,9 @@
       searchParams.completed = document.getElementById('searchCompleted').value;
       updateSearchButtonState();
       loadTodos(1);
-      closeSearchModal();
+      if (close) {
+        closeSearchModal();
+      }
     }
 
     function updateSearchButtonState() {
@@ -289,6 +306,25 @@
         return searchParams[k];
       });
       document.querySelector('.btn-search').classList.toggle('active', hasFilter);
+    }
+
+    function clearSearchField(fieldId) {
+      document.getElementById(fieldId).value = '';
+      doSearch(false);
+    }
+
+    function clearDateRange() {
+      document.getElementById('searchStartDate').value = '';
+      document.getElementById('searchEndDate').value = '';
+      doSearch(false);
+    }
+
+    function onStartDateChange() {
+      const startDate = document.getElementById('searchStartDate').value;
+      const endDate = document.getElementById('searchEndDate').value;
+      if (startDate && !endDate) {
+        document.getElementById('searchEndDate').value = startDate;
+      }
     }
 
     function showSearchCategoryDropdown() {
