@@ -178,10 +178,12 @@ router.get('/search', function(req, res) {
       for (const file of files) {
         const fullPath = path.join(dir, file);
         const relPath = relativePath ? path.join(relativePath, file) : file;
-        const stat = fs.statSync(fullPath);
+        const stat = fs.lstatSync(fullPath);
 
         if (stat.isDirectory()) {
-          searchDir(fullPath, relPath);
+          if (!stat.isSymbolicLink()) {
+            searchDir(fullPath, relPath);
+          }
         } else if (file.toLowerCase().includes(keyword.toLowerCase())) {
           results.push({
             filename: file,
@@ -303,19 +305,41 @@ router.get('/dir', function(req, res) {
     const files = fs.readdirSync(fullPath);
     const result = [];
 
+    const countryPath = path.join(musicPath, 'country');
+    const countryExists = fs.existsSync(countryPath) && fs.statSync(countryPath).isDirectory();
+    const lightPath = path.join(musicPath, 'Light');
+    const lightExists = fs.existsSync(lightPath) && fs.statSync(lightPath).isDirectory();
+
     for (const file of files) {
       if (file.startsWith('.')) continue;
       
       const fileFullPath = path.join(fullPath, file);
-      const fileStat = fs.statSync(fileFullPath);
+      const fileStat = fs.lstatSync(fileFullPath);
       const relPath = dir ? path.join(dir, file) : file;
+
+      let linkedIn = [];
+      let isPure = false;
+      if (fileStat.isDirectory() && !fileStat.isSymbolicLink()) {
+        const realFullPath = fs.realpathSync(fileFullPath);
+        if (countryExists) {
+          const countrySymlinks = findSymlinksTo(realFullPath, countryPath);
+          linkedIn = countrySymlinks.map(lp => path.basename(path.dirname(lp)));
+        }
+        if (lightExists) {
+          const lightSymlinks = findSymlinksTo(realFullPath, lightPath);
+          isPure = lightSymlinks.length > 0;
+        }
+      }
 
       result.push({
         name: file,
         path: relPath,
         isDirectory: fileStat.isDirectory(),
+        isSymbolicLink: fileStat.isSymbolicLink(),
         size: fileStat.size,
-        modified: fileStat.mtime
+        modified: fileStat.mtime,
+        linkedIn: linkedIn,
+        isPure: isPure
       });
     }
 
@@ -414,6 +438,10 @@ router.post('/delete-file', function(req, res) {
     if (stat.isSymbolicLink()) {
       fs.unlinkSync(fullPath);
     } else if (stat.isDirectory()) {
+      const symlinks = findSymlinksTo(fullPath, musicPath);
+      for (const linkPath of symlinks) {
+        fs.unlinkSync(linkPath);
+      }
       fs.rmSync(fullPath, { recursive: true });
     } else {
       fs.unlinkSync(fullPath);
@@ -583,7 +611,24 @@ router.post('/move', function(req, res) {
       return res.json({ success: false, message: '目标位置已存在同名文件/目录' });
     }
 
+    const stat = fs.lstatSync(sourcePath);
+    const symlinks = [];
+    if (stat.isDirectory()) {
+      symlinks.push(...findSymlinksTo(sourcePath, musicPath));
+    }
+
+    for (const linkPath of symlinks) {
+      fs.unlinkSync(linkPath);
+    }
+
     fs.renameSync(sourcePath, targetPath);
+
+    for (const linkPath of symlinks) {
+      const linkDir = path.dirname(linkPath);
+      const newLinkTarget = path.relative(linkDir, targetPath);
+      fs.symlinkSync(newLinkTarget, linkPath);
+    }
+
     res.json({ success: true, message: '移动成功' });
   } catch (err) {
     res.json({ success: false, message: '移动失败: ' + err.message });
@@ -622,7 +667,24 @@ router.post('/batch-move', function(req, res) {
       }
 
       try {
+        const stat = fs.lstatSync(sourcePath);
+        const symlinks = [];
+        if (stat.isDirectory()) {
+          symlinks.push(...findSymlinksTo(sourcePath, musicPath));
+        }
+
+        for (const linkPath of symlinks) {
+          fs.unlinkSync(linkPath);
+        }
+
         fs.renameSync(sourcePath, targetPath);
+
+        for (const linkPath of symlinks) {
+          const linkDir = path.dirname(linkPath);
+          const newLinkTarget = path.relative(linkDir, targetPath);
+          fs.symlinkSync(newLinkTarget, linkPath);
+        }
+
         moved.push(filename);
       } catch (err) {
         failed.push(filename);
