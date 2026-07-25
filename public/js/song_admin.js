@@ -247,7 +247,8 @@ class MusicPlayer {
 
     let cleanFilePath = filePath;
     if (this.options.removeMusicPrefix) {
-      cleanFilePath = filePath.replace(/^music\//, '').split('/music/')[1];
+      const part = filePath.replace(/^music\//, '').split('/music/')
+      cleanFilePath = part.length > 1 ?  part[1] : part[0];
     }
 
     this.currentFilePath = cleanFilePath;
