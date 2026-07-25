@@ -704,7 +704,7 @@ router.post('/batch-move', function(req, res) {
 
 router.get('/playlist', function(req, res) {
   try {
-    const playlistPath = path.join(musicPath, 'play.lst');
+    const playlistPath = path.join(musicPath, 'help/play.lst');
     if (!fs.existsSync(playlistPath)) {
       return res.json({ success: false, message: '播放列表文件不存在' });
     }

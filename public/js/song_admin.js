@@ -247,7 +247,7 @@ class MusicPlayer {
 
     let cleanFilePath = filePath;
     if (this.options.removeMusicPrefix) {
-      cleanFilePath = filePath.replace(/^music\//, '');
+      cleanFilePath = filePath.replace(/^music\//, '').split('/music/')[1];
     }
 
     this.currentFilePath = cleanFilePath;
@@ -1227,7 +1227,7 @@ async function loadDir(dir = '') {
         if (focusedName) {
           const targetItem = listDiv.querySelector(`[data-name="${escapeHtmlAttr(focusedName)}"]`);
           if (targetItem) {
-            targetItem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            targetItem.scrollIntoView({ behavior: 'smooth', block: 'start' });
             focusedNames.delete(currentDir);
             return;
           }
