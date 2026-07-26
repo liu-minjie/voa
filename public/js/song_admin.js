@@ -604,7 +604,7 @@ class MusicPlayer {
   onAudioError() {
     showToast('播放错误: 无法加载音频文件');
     this.close();
-    this.onAudioEnded();
+    //this.onAudioEnded();
   }
 
   replayCurrent() {
@@ -1048,8 +1048,6 @@ let playlistCurrentIndex = 0;
 let playlistPlayer = null;
 async function showPlaylistModal() {
   const modal = document.getElementById('playlistModal');
-  const listDiv = document.getElementById('playlistList');
-  listDiv.innerHTML = '<div class="loading">加载中...</div>';
   modal.classList.add('active');
 
   const playlistContainer = document.getElementById('playlistPlayerContainer');
@@ -1063,6 +1061,14 @@ async function showPlaylistModal() {
       }
     });
   }
+
+  if (playlistSongs.length > 0) {
+    renderPlaylist();
+    return;
+  }
+
+  const listDiv = document.getElementById('playlistList');
+  listDiv.innerHTML = '<div class="loading">加载中...</div>';
 
   try {
     const res = await fetch('/song/playlist');
@@ -1080,9 +1086,6 @@ async function showPlaylistModal() {
 }
 function closePlaylistModal() {
   document.getElementById('playlistModal').classList.remove('active');
-  if (playlistPlayer) {
-    playlistPlayer.close();
-  }
 }
 function renderPlaylist() {
   const listDiv = document.getElementById('playlistList');
@@ -1093,6 +1096,7 @@ function renderPlaylist() {
         <div class="playlist-title">${escapeHtml(song.title)}</div>
         <div class="playlist-path">${escapeHtml(song.path)}</div>
       </div>
+      <button class="btn btn-sm btn-info" onclick="event.stopPropagation(); showMetadataModal('${escapeHtmlAttr(song.path)}')">信息</button>
     </div>
   `).join('');
   updatePlaylistPlayer();
@@ -1145,6 +1149,129 @@ function updatePlaylistPlayer() {
 
 
 
+let metadataFilePath = '';
+let customInfoItems = [];
+
+function addCustomInfo(title = '', content = '') {
+  customInfoItems.push({ title, content });
+  renderCustomInfo();
+}
+
+function removeCustomInfo(index) {
+  customInfoItems.splice(index, 1);
+  renderCustomInfo();
+}
+
+function updateCustomInfo(index, field, value) {
+  customInfoItems[index][field] = value;
+}
+
+function renderCustomInfo() {
+  const listDiv = document.getElementById('customInfoList');
+  listDiv.innerHTML = customInfoItems.map((item, index) => `
+    <div class="custom-info-item" style="display:flex; gap:8px; align-items:center;">
+      <input type="text" value="${escapeHtmlAttr(item.title)}" placeholder="标题" 
+        onchange="updateCustomInfo(${index}, 'title', this.value)"
+        style="width:100px; padding:6px 10px; border:1px solid #ddd; border-radius:4px; font-size:13px;">
+      <input type="text" value="${escapeHtmlAttr(item.content)}" placeholder="内容" 
+        onchange="updateCustomInfo(${index}, 'content', this.value)"
+        style="flex:1; padding:6px 10px; border:1px solid #ddd; border-radius:4px; font-size:13px;">
+      <button class="btn btn-sm btn-danger" onclick="removeCustomInfo(${index})" style="padding:4px 8px; font-size:12px;">删除</button>
+    </div>
+  `).join('');
+}
+
+async function showMetadataModal(filePath) {
+  filePath = filePath.replace(/^music\//, '');
+  metadataFilePath = filePath;
+  customInfoItems = [];
+  const modal = document.getElementById('metadataModal');
+  const infoDiv = document.getElementById('metadataInfo');
+  infoDiv.innerHTML = '加载中...';
+  modal.classList.add('active');
+  renderCustomInfo();
+
+  try {
+    const res = await fetch(`/song/metadata?filePath=${encodeURIComponent(filePath)}`);
+    const data = await res.json();
+    if (data.success) {
+      const m = data.data;
+      document.getElementById('meta-title').value = m.title || '';
+      document.getElementById('meta-artist').value = m.artist || '';
+      document.getElementById('meta-album').value = m.album || '';
+      document.getElementById('meta-genre').value = m.genre || '';
+      document.getElementById('meta-year').value = m.year || '';
+      document.getElementById('meta-track').value = m.track || '';
+      document.getElementById('meta-disc').value = m.disc || '';
+      
+      if (m.customInfo && Array.isArray(m.customInfo)) {
+        customInfoItems = m.customInfo;
+        renderCustomInfo();
+      }
+      
+      const duration = m.duration ? formatDuration(m.duration) : '-';
+      const bitrate = m.bitrate ? Math.round(m.bitrate / 1000) + ' kbps' : '-';
+      const sampleRate = m.sampleRate ? (m.sampleRate / 1000) + ' kHz' : '-';
+      const channels = m.channels || '-';
+      const fileSize = m.fileSize ? formatFileSize(m.fileSize) : '-';
+      
+      infoDiv.innerHTML = `
+        <div>文件: ${escapeHtml(filePath)}</div>
+        <div>时长: ${duration} | 比特率: ${bitrate}</div>
+        <div>采样率: ${sampleRate} | 声道: ${channels}</div>
+        <div>大小: ${fileSize}</div>
+      `;
+    } else {
+      infoDiv.innerHTML = '读取失败: ' + (data.message || '未知错误');
+    }
+  } catch (err) {
+    infoDiv.innerHTML = '加载失败: ' + err.message;
+  }
+}
+
+function closeMetadataModal() {
+  document.getElementById('metadataModal').classList.remove('active');
+}
+
+async function saveMetadata() {
+  const metadata = {
+    title: document.getElementById('meta-title').value,
+    artist: document.getElementById('meta-artist').value,
+    album: document.getElementById('meta-album').value,
+    genre: document.getElementById('meta-genre').value,
+    year: document.getElementById('meta-year').value,
+    track: document.getElementById('meta-track').value,
+    disc: document.getElementById('meta-disc').value,
+    customInfo: customInfoItems.filter(item => item.title || item.content),
+  };
+
+  try {
+    const res = await fetch('/song/metadata', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filePath: metadataFilePath, metadata })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('保存成功');
+      closeMetadataModal();
+    } else {
+      showToast('保存失败: ' + data.message);
+    }
+  } catch (err) {
+    showToast('保存失败: ' + err.message);
+  }
+}
+
+function formatDuration(seconds) {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+
+
+
 function handleDirSelectAction(select, filePath, filename, isDirectory) {
   const action = select.value;
   select.value = '';
@@ -1152,6 +1279,9 @@ function handleDirSelectAction(select, filePath, filename, isDirectory) {
   switch(action) {
     case 'play':
       playMusic(filePath, filename, 'select');
+      break;
+    case 'info':
+      showMetadataModal(filePath);
       break;
     case 'move':
       showMoveModal(filePath);
@@ -1206,6 +1336,7 @@ async function loadDir(dir = '') {
               <select onchange="handleDirSelectAction(this, '${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.name)}', ${item.isDirectory})">
                 <option value="">操作</option>
                 ${!item.isDirectory ? `<option value="play">播放</option>` : ''}
+                ${!item.isDirectory ? `<option value="info">信息</option>` : ''}
                 <option value="move">移动</option>
                 <option value="copy">复制文件名</option>
                 <option value="rename">重命名</option>
@@ -1214,7 +1345,8 @@ async function loadDir(dir = '') {
             </div>
             <div class="desktop-actions" onclick="event.stopPropagation()">
               ${!item.isDirectory ? `<button class="btn btn-sm btn-play" onclick="playMusic('${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.name)}', 'select')">播放</button>` : ''}
-              <button class="btn btn-sm btn-info" onclick="showMoveModal('${escapeHtmlAttr(item.path)}')">移动</button>
+              ${!item.isDirectory ? `<button class="btn btn-sm btn-info" onclick="showMetadataModal('${escapeHtmlAttr(item.path)}')">信息</button>` : ''}
+              <button class="btn btn-sm" onclick="showMoveModal('${escapeHtmlAttr(item.path)}')">移动</button>
               <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${escapeHtmlAttr(item.name).replace(/\.[^.]+$/, '')}').then(()=>showToast('已复制文件名')).catch(()=>showToast('复制失败'))">复制</button>
               <button class="btn btn-sm btn-warning" onclick="showRenameModal('${escapeHtmlAttr(item.name)}', '${escapeHtmlAttr(item.path)}')">重命名</button>
               <button class="btn btn-sm btn-danger" onclick="if(confirm('确定要删除${item.isDirectory ? '文件夹' : '文件'} ${escapeHtmlAttr(item.name)}吗？')) deleteFile('${escapeHtmlAttr(item.path)}')">删除</button>

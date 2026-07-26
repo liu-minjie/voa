@@ -72,6 +72,57 @@
     </div>
   </div>
 
+  <div class="modal" id="metadataModal">
+    <div class="modal-content" style="position:relative;">
+      <span class="circle-close" onclick="closeMetadataModal()" style="position:absolute; top:15px; right:15px; z-index: 100; cursor: pointer;">×</span>
+      <h3>歌曲信息</h3>
+      <div id="metadataForm" style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
+        <div style="display:flex; align-items:center;">
+          <label style="width:80px; font-size:14px; color:#666;">标题</label>
+          <input type="text" id="meta-title" style="flex:1; padding:8px 12px; border:1px solid #ddd; border-radius:4px;">
+        </div>
+        <div style="display:flex; align-items:center;">
+          <label style="width:80px; font-size:14px; color:#666;">艺术家</label>
+          <input type="text" id="meta-artist" style="flex:1; padding:8px 12px; border:1px solid #ddd; border-radius:4px;">
+        </div>
+        <div style="display:flex; align-items:center;">
+          <label style="width:80px; font-size:14px; color:#666;">专辑</label>
+          <input type="text" id="meta-album" style="flex:1; padding:8px 12px; border:1px solid #ddd; border-radius:4px;">
+        </div>
+        <div style="display:flex; align-items:center;">
+          <label style="width:80px; font-size:14px; color:#666;">流派</label>
+          <input type="text" id="meta-genre" style="flex:1; padding:8px 12px; border:1px solid #ddd; border-radius:4px;">
+        </div>
+        <div style="display:flex; align-items:center;">
+          <label style="width:80px; font-size:14px; color:#666;">年份</label>
+          <input type="text" id="meta-year" style="flex:1; padding:8px 12px; border:1px solid #ddd; border-radius:4px;">
+        </div>
+        <div style="display:flex; gap:10px;">
+          <div style="display:flex; align-items:center; flex:1;">
+            <label style="width:80px; font-size:14px; color:#666;">音轨</label>
+            <input type="text" id="meta-track" style="flex:1; padding:8px 12px; border:1px solid #ddd; border-radius:4px;">
+          </div>
+          <div style="display:flex; align-items:center; flex:1;">
+            <label style="width:60px; font-size:14px; color:#666;">碟片</label>
+            <input type="text" id="meta-disc" style="flex:1; padding:8px 12px; border:1px solid #ddd; border-radius:4px;">
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:15px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <span style="font-size:14px; color:#666; font-weight:500;">自定义信息</span>
+          <button class="btn btn-sm" onclick="addCustomInfo()" style="padding:4px 10px; font-size:12px;">+ 添加</button>
+        </div>
+        <div id="customInfoList" style="display:flex; flex-direction:column; gap:8px;"></div>
+      </div>
+      <div id="metadataInfo" style="margin-top:15px; padding:10px; background:#f5f5f5; border-radius:4px; font-size:12px; color:#666;"></div>
+      <div class="modal-actions" style="margin-top:15px;">
+        <button class="btn btn-secondary" onclick="closeMetadataModal()">取消</button>
+        <button class="btn btn-primary" onclick="saveMetadata()">保存</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/public/js/song_admin.js"></script>
 </body>
 </html>

@@ -459,9 +459,31 @@ body {
   cursor: pointer;
 }
 
-
-
-
+#metadataModal .modal-content {
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  border-radius: 16px;
+}
+#metadataModal .modal-content h3 {
+  position: relative;
+}
+#metadataModal input[type="text"] {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  margin-bottom: 0;
+}
+#metadataModal input[type="text"]:focus {
+  outline: none;
+  border-color: #4CAF50;
+}
+#metadataModal .btn-secondary {
+  background: #f5f5f5;
+  color: #666;
+}
 
 .playlist-item {
   display: flex;

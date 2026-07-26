@@ -726,4 +726,294 @@ router.get('/playlist', function(req, res) {
   }
 });
 
+const mm = require('music-metadata');
+const ID3 = require('node-id3');
+
+function encodeSize(size) {
+  return [
+    (size >> 21) & 0x7F,
+    (size >> 14) & 0x7F,
+    (size >> 7) & 0x7F,
+    size & 0x7F
+  ];
+}
+
+function decodeSize(bytes) {
+  return ((bytes[0] & 0x7F) << 21) | ((bytes[1] & 0x7F) << 14) | 
+         ((bytes[2] & 0x7F) << 7) | (bytes[3] & 0x7F);
+}
+
+function buildTXXXFrame(description, value, useSyncsafe = false) {
+  const descBuf = Buffer.from(description, 'utf8');
+  const valBuf = Buffer.from(value, 'utf8');
+  const contentLen = 1 + descBuf.length + 1 + valBuf.length;
+  
+  const frame = Buffer.alloc(10 + contentLen);
+  frame.write('TXXX', 0, 'ascii');
+  
+  if (useSyncsafe) {
+    const sizeBytes = encodeSize(contentLen);
+    frame[4] = sizeBytes[0];
+    frame[5] = sizeBytes[1];
+    frame[6] = sizeBytes[2];
+    frame[7] = sizeBytes[3];
+  } else {
+    frame.writeUInt32BE(contentLen, 4);
+  }
+  
+  frame[8] = 0;
+  frame[9] = 0;
+  
+  let offset = 10;
+  frame[offset++] = 0x03;
+  descBuf.copy(frame, offset);
+  offset += descBuf.length;
+  frame[offset++] = 0x00;
+  valBuf.copy(frame, offset);
+  
+  return frame;
+}
+
+function readTXXXFrames(id3v2Buffer) {
+  const frames = [];
+  
+  if (id3v2Buffer.length < 10 || id3v2Buffer.toString('ascii', 0, 3) !== 'ID3') {
+    return frames;
+  }
+  
+  const version = id3v2Buffer[3];
+  const tagSize = decodeSize([id3v2Buffer[6], id3v2Buffer[7], id3v2Buffer[8], id3v2Buffer[9]]);
+  
+  let offset = 10;
+  const endOffset = offset + tagSize;
+  
+  while (offset < endOffset) {
+    if (offset + 10 > id3v2Buffer.length) break;
+    
+    const frameId = id3v2Buffer.toString('ascii', offset, offset + 4);
+    
+    if (frameId === '\x00\x00\x00\x00') break;
+    
+    let frameSize;
+    if (version >= 4) {
+      frameSize = decodeSize([id3v2Buffer[offset + 4], id3v2Buffer[offset + 5], id3v2Buffer[offset + 6], id3v2Buffer[offset + 7]]);
+    } else {
+      frameSize = id3v2Buffer.readUInt32BE(offset + 4);
+    }
+    
+    offset += 10;
+    
+    if (frameId === 'TXXX') {
+      const encoding = id3v2Buffer[offset];
+      offset++;
+      
+      let descStart = offset;
+      while (offset < id3v2Buffer.length && id3v2Buffer[offset] !== 0x00) offset++;
+      const description = id3v2Buffer.toString('utf8', descStart, offset);
+      offset++;
+      
+      const valueStart = offset;
+      const valueLen = frameSize - (offset - descStart);
+      const value = id3v2Buffer.toString('utf8', valueStart, valueStart + valueLen);
+      frames.push({ description, value });
+      
+      offset = valueStart + valueLen;
+    } else {
+      offset += frameSize;
+    }
+  }
+  
+  return frames;
+}
+
+function readCustomInfoFromMP3(filePath) {
+  try {
+    const buffer = fs.readFileSync(filePath);
+    
+    let id3Size = 0;
+    let id3v2 = null;
+    
+    if (buffer.length >= 10 && buffer.toString('ascii', 0, 3) === 'ID3') {
+      id3Size = decodeSize([buffer[6], buffer[7], buffer[8], buffer[9]]);
+      id3v2 = buffer.slice(0, 10 + id3Size);
+    }
+    
+    if (!id3v2) return [];
+    
+    const txxxFrames = readTXXXFrames(id3v2);
+    const customInfoFrame = txxxFrames.find(f => f.description === 'customInfo');
+    
+    if (customInfoFrame) {
+      return JSON.parse(customInfoFrame.value);
+    }
+    
+    return [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function writeCustomInfoToMP3(filePath, customInfo, newTags = {}) {
+  const buffer = fs.readFileSync(filePath);
+  
+  let existingId3Size = 0;
+  let audioStart = 0;
+  let id3Version = 3;
+  
+  if (buffer.length >= 10 && buffer.toString('ascii', 0, 3) === 'ID3') {
+    id3Version = buffer[3];
+    existingId3Size = decodeSize([buffer[6], buffer[7], buffer[8], buffer[9]]);
+    audioStart = 10 + existingId3Size;
+  }
+  
+  const id3Tag = ID3.read(buffer);
+  
+  const standardTags = {};
+  if (newTags.title !== undefined) standardTags.title = newTags.title || undefined;
+  else if (id3Tag.title) standardTags.title = id3Tag.title;
+  if (newTags.artist !== undefined) standardTags.artist = newTags.artist || undefined;
+  else if (id3Tag.artist) standardTags.artist = id3Tag.artist;
+  if (newTags.album !== undefined) standardTags.album = newTags.album || undefined;
+  else if (id3Tag.album) standardTags.album = id3Tag.album;
+  if (newTags.genre !== undefined) standardTags.genre = newTags.genre || undefined;
+  else if (id3Tag.genre) standardTags.genre = id3Tag.genre;
+  if (newTags.year !== undefined) standardTags.year = newTags.year || undefined;
+  else if (id3Tag.year) standardTags.year = id3Tag.year;
+  if (newTags.trackNumber !== undefined) standardTags.trackNumber = newTags.trackNumber || undefined;
+  else if (id3Tag.trackNumber) standardTags.trackNumber = id3Tag.trackNumber;
+  if (newTags.partOfSet !== undefined) standardTags.partOfSet = newTags.partOfSet || undefined;
+  else if (id3Tag.partOfSet) standardTags.partOfSet = id3Tag.partOfSet;
+  
+  const originalAudio = buffer.slice(audioStart);
+  const resultBuffer = ID3.write(standardTags, originalAudio);
+  
+  let newId3Tag;
+  let newId3Size;
+  
+  if (resultBuffer.length >= 10 && resultBuffer.toString('ascii', 0, 3) === 'ID3') {
+    newId3Size = decodeSize([resultBuffer[6], resultBuffer[7], resultBuffer[8], resultBuffer[9]]);
+    newId3Tag = resultBuffer.slice(0, 10 + newId3Size);
+    id3Version = resultBuffer[3];
+  } else {
+    newId3Tag = resultBuffer;
+    newId3Size = resultBuffer.length;
+  }
+  
+  const useSyncsafe = id3Version >= 4;
+  const txxxFrame = buildTXXXFrame('customInfo', JSON.stringify(customInfo), useSyncsafe);
+  const newTagContent = Buffer.concat([newId3Tag.slice(10), txxxFrame]);
+  
+  const finalTagSize = newTagContent.length;
+  const finalHeader = Buffer.alloc(10);
+  finalHeader.write('ID3', 0, 'ascii');
+  finalHeader[3] = id3Version;
+  finalHeader[4] = 0;
+  finalHeader[5] = 0;
+  const sizeBytes = encodeSize(finalTagSize);
+  finalHeader[6] = sizeBytes[0];
+  finalHeader[7] = sizeBytes[1];
+  finalHeader[8] = sizeBytes[2];
+  finalHeader[9] = sizeBytes[3];
+  
+  const finalId3 = Buffer.concat([finalHeader, newTagContent]);
+  const audioData = buffer.slice(audioStart);
+  
+  fs.writeFileSync(filePath, Buffer.concat([finalId3, audioData]));
+}
+
+router.get('/metadata', async function(req, res) {
+  try {
+    const { filePath } = req.query;
+    if (!filePath) {
+      return res.json({ success: false, message: '缺少文件路径' });
+    }
+
+    const fullPath = path.join(musicPath, filePath);
+    if (!fs.existsSync(fullPath)) {
+      return res.json({ success: false, message: '文件不存在' });
+    }
+
+    const stat = fs.statSync(fullPath);
+    const fileBuffer = fs.readFileSync(fullPath);
+    
+    let id3Tags = {};
+    try {
+      id3Tags = ID3.read(fileBuffer) || {};
+    } catch (e) {
+      // Ignore ID3 read errors
+    }
+    
+    let formatInfo = { duration: 0, bitrate: 0, sampleRate: 0, channels: 0 };
+    try {
+      const metadata = await mm.parseFile(fullPath);
+      formatInfo = {
+        duration: metadata.format?.duration || 0,
+        bitrate: metadata.format?.bitrate || 0,
+        sampleRate: metadata.format?.sampleRate || 0,
+        channels: metadata.format?.channels || 0,
+      };
+    } catch (e) {
+      // Ignore format read errors
+    }
+    
+    const customInfo = readCustomInfoFromMP3(fullPath);
+    
+    const result = {
+      title: id3Tags.title || '',
+      artist: id3Tags.artist || '',
+      album: id3Tags.album || '',
+      genre: id3Tags.genre || '',
+      year: id3Tags.year || '',
+      track: id3Tags.trackNumber || '',
+      disc: id3Tags.partOfSet || '',
+      duration: formatInfo.duration,
+      bitrate: formatInfo.bitrate,
+      sampleRate: formatInfo.sampleRate,
+      channels: formatInfo.channels,
+      fileSize: stat.size,
+      customInfo
+    };
+
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.json({ success: false, message: '读取元信息失败: ' + err.message });
+  }
+});
+
+router.post('/metadata', async function(req, res) {
+  try {
+    const { filePath, metadata } = req.body;
+    if (!filePath || !metadata) {
+      return res.json({ success: false, message: '缺少参数' });
+    }
+
+    const fullPath = path.join(musicPath, filePath);
+    if (!fs.existsSync(fullPath)) {
+      return res.json({ success: false, message: '文件不存在' });
+    }
+
+    const tags = {};
+    if (metadata.title !== undefined) tags.title = metadata.title;
+    if (metadata.artist !== undefined) tags.artist = metadata.artist;
+    if (metadata.album !== undefined) tags.album = metadata.album;
+    if (metadata.genre !== undefined) tags.genre = metadata.genre;
+    if (metadata.year !== undefined) tags.year = metadata.year;
+    if (metadata.track !== undefined) tags.trackNumber = metadata.track;
+    if (metadata.disc !== undefined) tags.partOfSet = metadata.disc;
+
+    if (metadata.customInfo && Array.isArray(metadata.customInfo)) {
+      writeCustomInfoToMP3(fullPath, metadata.customInfo, tags);
+    } else {
+      const fileBuffer = fs.readFileSync(fullPath);
+      const newBuffer = ID3.write(tags, fileBuffer);
+      fs.writeFileSync(fullPath, newBuffer);
+    }
+
+    res.json({ success: true, message: '保存成功' });
+  } catch (err) {
+    console.error('Save metadata error:', err);
+    res.json({ success: false, message: '保存元信息失败: ' + err.message });
+  }
+});
+
 module.exports = router;

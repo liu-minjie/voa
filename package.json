@@ -30,6 +30,8 @@
     "log4js": "^0.6.29",
     "moment": "^2.20.1",
     "multiparty": "^4.2.3",
+    "music-metadata": "^7.14.0",
+    "node-id3": "^0.2.9",
     "promised-handlebars": "^2.0.1",
     "recluster": "~0.4.5",
     "request": "^2.83.0",
