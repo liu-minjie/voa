@@ -397,7 +397,7 @@ router.get('/dir', function(req, res) {
     const lightPath = path.join(musicPath, 'Light');
     const lightExists = fs.existsSync(lightPath) && fs.statSync(lightPath).isDirectory();
 
-    // 读取 song.json 获取作曲人信息
+    // 读取 songMeta.json 获取作曲人信息
     const songJsonPath = path.join(dataPath, 'songMeta.json');
     let composerMap = {};
     if (fs.existsSync(songJsonPath)) {
@@ -521,7 +521,7 @@ router.post('/rename-file', function(req, res) {
       fs.symlinkSync(newLinkTarget, newLinkPath);
     }
 
-    // 更新 song.json 和 composer.json 中的歌名
+    // 更新 songMeta.json 和 composer.json 中的歌名
     if (stat.isFile()) {
       const oldSongName = path.basename(relPath, path.extname(relPath));
       const newSongName = path.basename(newName, path.extname(newName));
@@ -1140,7 +1140,7 @@ router.post('/metadata', async function(req, res) {
       fs.writeFileSync(fullPath, newBuffer);
     }
 
-    // 如果 genre 有值，保存作曲人信息到 song.json 和 composer.json
+    // 如果 genre 有值，保存作曲人信息到 songMeta.json 和 composer.json
     if (metadata.genre && metadata.genre.trim()) {
       const songName = path.basename(filePath, path.extname(filePath));
       saveComposerInfo(songName, metadata.genre.trim());

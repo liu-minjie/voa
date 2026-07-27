@@ -1841,7 +1841,112 @@ function startBatchMove() {
   });
 }
 
+let editingSongId = '';
+
+async function loadSongList() {
+  const listDiv = document.getElementById('songList');
+  listDiv.innerHTML = '<div class="loading">加载中...</div>';
+
+  try {
+    const res = await fetch('/song/list');
+    const data = await res.json();
+
+    if (data.success) {
+      const songs = data.data;
+      if (songs.length === 0) {
+        listDiv.innerHTML = '<div class="empty">暂无歌曲</div>';
+      } else {
+        listDiv.innerHTML = `
+          <table class="song-list-table">
+            <thead>
+              <tr>
+                <th>歌名</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${songs.map(song => `
+                <tr>
+                  <td>${escapeHtml(song.filename)}</td>
+                  <td>
+                    <button class="btn btn-sm" onclick="showEditSongModal(${song.id}, '${escapeHtmlAttr(song.filename)}')">编辑</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteSong(${song.id})">删除</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        `;
+      }
+    } else {
+      listDiv.innerHTML = '<div class="empty">加载失败: ' + data.message + '</div>';
+    }
+  } catch (err) {
+    listDiv.innerHTML = '<div class="empty">加载失败: ' + err.message + '</div>';
+  }
+}
+
+function showEditSongModal(id, filename) {
+  editingSongId = id;
+  document.getElementById('editSongName').value = filename;
+  document.getElementById('editSongModal').classList.add('active');
+}
+
+function closeEditSongModal() {
+  document.getElementById('editSongModal').classList.remove('active');
+  editingSongId = '';
+}
+
+async function confirmEditSong() {
+  const newName = document.getElementById('editSongName').value.trim();
+
+  if (!newName) {
+    showToast('请输入歌名');
+    return;
+  }
+
+  try {
+    const res = await fetch('/song/rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: editingSongId, newName })
+    });
+    const data = await res.json();
+    if (data.success) {
+      closeEditSongModal();
+      loadSongList();
+      showToast('更新成功');
+    } else {
+      showToast('更新失败: ' + data.message);
+    }
+  } catch (err) {
+    showToast('更新失败: ' + err.message);
+  }
+}
+
+async function deleteSong(id) {
+  if (!confirm('确定要删除这首歌吗？')) return;
+
+  try {
+    const res = await fetch('/song/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    });
+    const data = await res.json();
+    if (data.success) {
+      loadSongList();
+      showToast('删除成功');
+    } else {
+      showToast('删除失败: ' + data.message);
+    }
+  } catch (err) {
+    showToast('删除失败: ' + err.message);
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   loadDir();
   document.getElementById('searchResult').innerHTML = renderEmptySearch();
+  loadSongList();
 });

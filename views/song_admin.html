@@ -36,6 +36,15 @@
         <div class="loading">加载中...</div>
       </div>
     </div>
+
+    <div class="section">
+      <div class="section-header">
+        <h3>歌曲列表</h3>
+      </div>
+      <div class="list-container" id="songList">
+        <div class="loading">加载中...</div>
+      </div>
+    </div>
   </div>
 
 </audio>
@@ -58,6 +67,20 @@
       <div class="modal-actions">
         <button class="btn btn-cancel" onclick="closeNewFolderModal()">取消</button>
         <button class="btn btn-primary" onclick="createNewFolder()">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="editSongModal">
+    <div class="modal-content">
+      <h3>编辑歌曲</h3>
+      <div style="margin-bottom: 12px;">
+        <label style="display:block; margin-bottom:4px; font-size:13px;">歌名</label>
+        <input type="text" id="editSongName" placeholder="输入歌名" autocomplete="off" style="width:100%; padding:6px;">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-cancel" onclick="closeEditSongModal()">取消</button>
+        <button class="btn btn-primary" onclick="confirmEditSong()">确定</button>
       </div>
     </div>
   </div>
