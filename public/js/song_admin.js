@@ -1097,7 +1097,7 @@ function renderPlaylist() {
         <div class="playlist-path">${escapeHtml(song.path)}</div>
         <div class="meta-row">${song.composer ? song.composer.split('-').map(c => c.trim() ? `<span class="composer-tag">${escapeHtml(c.trim())}</span>` : '').join('') : ''}${song.size ? `<span class="size-tag">${formatFileSize(song.size)}</span>` : ''}</div>
       </div>
-      <button class="btn btn-sm btn-info" onclick="event.stopPropagation(); showMetadataModal('${escapeHtmlAttr(song.path)}')">信息</button>
+      <button class="btn btn-sm btn-info" onclick="event.stopPropagation(); showMetadataModal('${escapeHtmlAttr(song.path)}', event)">信息</button>
     </div>
   `).join('');
   updatePlaylistPlayer();
@@ -1182,9 +1182,19 @@ function renderCustomInfo() {
   `).join('');
 }
 
-async function showMetadataModal(filePath) {
+let metadataRowElement = null;
+
+async function showMetadataModal(filePath, event) {
   filePath = filePath.replace(/^music\//, '');
   metadataFilePath = filePath;
+  
+  if (event) {
+    const btn = event.target;
+    metadataRowElement = btn.closest('.file-item') || btn.closest('.playlist-item');
+  } else {
+    metadataRowElement = null;
+  }
+  
   customInfoItems = [];
   const modal = document.getElementById('metadataModal');
   const infoDiv = document.getElementById('metadataInfo');
@@ -1255,12 +1265,28 @@ async function saveMetadata() {
     const data = await res.json();
     if (data.success) {
       showToast('保存成功');
+      updateComposerInList(metadata.genre);
       closeMetadataModal();
     } else {
       showToast('保存失败: ' + data.message);
     }
   } catch (err) {
     showToast('保存失败: ' + err.message);
+  }
+}
+
+function updateComposerInList(genre) {
+  if (!metadataRowElement) return;
+
+  const composerHtml = genre && genre.trim()
+    ? genre.split('-').map(c => c.trim() ? `<span class="composer-tag">${escapeHtml(c.trim())}</span>` : '').join('')
+    : '';
+
+  const metaRow = metadataRowElement.querySelector('.meta-row');
+  if (metaRow) {
+    const sizeTag = metaRow.querySelector('.size-tag');
+    const sizeHtml = sizeTag ? sizeTag.outerHTML : '';
+    metaRow.innerHTML = composerHtml + sizeHtml;
   }
 }
 
@@ -1305,7 +1331,7 @@ function handleDirSelectAction(select, filePath, filename, isDirectory) {
       break;
   }
 }
-async function loadDir(dir = '') {
+async function loadDir(dir = '', pushState = true) {
   const listDiv = document.getElementById('dirList');
   const navDiv = document.getElementById('dirNav');
   
@@ -1318,7 +1344,13 @@ async function loadDir(dir = '') {
     const data = await res.json();
 
     if (data.success) {
+      const oldDir = currentDir;
       currentDir = data.currentDir;
+      
+      if (pushState && oldDir !== currentDir) {
+        history.pushState({ dir: currentDir }, '', `#${encodeURIComponent(currentDir)}`);
+      }
+      
       navDiv.innerHTML = buildDirNav(data.currentDir);
 
       currentDirAudioFiles = data.data.filter(item => !item.isDirectory);
@@ -1347,7 +1379,7 @@ async function loadDir(dir = '') {
             </div>
             <div class="desktop-actions" onclick="event.stopPropagation()">
               ${!item.isDirectory ? `<button class="btn btn-sm btn-play" onclick="playMusic('${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.name)}', 'select')">播放</button>` : ''}
-              ${!item.isDirectory ? `<button class="btn btn-sm btn-info" onclick="showMetadataModal('${escapeHtmlAttr(item.path)}')">信息</button>` : ''}
+              ${!item.isDirectory ? `<button class="btn btn-sm btn-info" onclick="showMetadataModal('${escapeHtmlAttr(item.path)}', event)">信息</button>` : ''}
               <button class="btn btn-sm" onclick="showMoveModal('${escapeHtmlAttr(item.path)}')">移动</button>
               <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${escapeHtmlAttr(item.name).replace(/\.[^.]+$/, '')}'  + (window.copyExt || ' 的作曲人是谁')).then(()=>showToast('已复制文件名')).catch(()=>showToast('复制失败'))">复制</button>
               <button class="btn btn-sm btn-warning" onclick="showRenameModal('${escapeHtmlAttr(item.name)}', '${escapeHtmlAttr(item.path)}')">重命名</button>
@@ -1946,7 +1978,43 @@ async function deleteSong(id) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  loadDir();
+  const initialDir = location.hash ? decodeURIComponent(location.hash.slice(1)) : '';
+  loadDir(initialDir, false);
   document.getElementById('searchResult').innerHTML = renderEmptySearch();
   loadSongList();
+  
+  document.querySelectorAll('.modal').forEach(modal => {
+    modalObserver.observe(modal, { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
+  });
+});
+
+window.addEventListener('popstate', function(e) {
+  const openModal = document.querySelector('.modal.active');
+  if (openModal) {
+    const closeBtn = openModal.querySelector('.circle-close, [onclick*="closeModal"], [onclick*="closePlaylist"], [onclick*="closeMetadata"], [onclick*="closeRename"], [onclick*="closeNewFolder"], [onclick*="closeEditSong"]');
+    if (closeBtn) {
+      closeBtn.click();
+    } else {
+      openModal.classList.remove('active');
+    }
+    return;
+  }
+  
+  if (e.state && e.state.dir !== undefined) {
+    loadDir(e.state.dir, false);
+  } else {
+    loadDir('', false);
+  }
+});
+
+const modalObserver = new MutationObserver(function(mutations) {
+  mutations.forEach(function(mutation) {
+    if (mutation.target.classList && mutation.target.classList.contains('modal')) {
+      const wasActive = mutation.oldValue && mutation.oldValue.includes('active');
+      const isActive = mutation.target.classList.contains('active');
+      if (isActive && !wasActive) {
+        history.pushState({ modal: true }, '', location.hash);
+      }
+    }
+  });
 });
