@@ -1289,7 +1289,7 @@ function handleDirSelectAction(select, filePath, filename, isDirectory) {
       break;
     case 'copy':
       const nameWithoutExt = filename.replace(/\.[^.]+$/, '');
-      navigator.clipboard.writeText(nameWithoutExt).then(() => {
+      navigator.clipboard.writeText(nameWithoutExt  + (window.copyExt || ' 的作曲人是谁')).then(() => {
         showToast('已复制文件名');
       }).catch(() => {
         showToast('复制失败');
@@ -1349,7 +1349,7 @@ async function loadDir(dir = '') {
               ${!item.isDirectory ? `<button class="btn btn-sm btn-play" onclick="playMusic('${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.name)}', 'select')">播放</button>` : ''}
               ${!item.isDirectory ? `<button class="btn btn-sm btn-info" onclick="showMetadataModal('${escapeHtmlAttr(item.path)}')">信息</button>` : ''}
               <button class="btn btn-sm" onclick="showMoveModal('${escapeHtmlAttr(item.path)}')">移动</button>
-              <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${escapeHtmlAttr(item.name).replace(/\.[^.]+$/, '')}').then(()=>showToast('已复制文件名')).catch(()=>showToast('复制失败'))">复制</button>
+              <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${escapeHtmlAttr(item.name).replace(/\.[^.]+$/, '')}'  + (window.copyExt || ' 的作曲人是谁')).then(()=>showToast('已复制文件名')).catch(()=>showToast('复制失败'))">复制</button>
               <button class="btn btn-sm btn-warning" onclick="showRenameModal('${escapeHtmlAttr(item.name)}', '${escapeHtmlAttr(item.path)}')">重命名</button>
               <button class="btn btn-sm btn-danger" onclick="if(confirm('确定要删除${item.isDirectory ? '文件夹' : '文件'} ${escapeHtmlAttr(item.name)}吗？')) deleteFile('${escapeHtmlAttr(item.path)}')">删除</button>
             </div>
