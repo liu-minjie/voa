@@ -27,6 +27,93 @@ const writeFileSync = (filePath, data) => {
   fs.writeFileSync(absolutePath, JSON.stringify(data, null, 2), 'utf8');
 };
 
+function saveComposerInfo(songName, genreValue) {
+  if (!songName || !genreValue) return;
+  
+  // 1. 更新 songMeta.json: {歌名: genre字段值}
+  const songJsonPath = path.join(dataPath, 'songMeta.json');
+  let songData = {};
+  if (fs.existsSync(songJsonPath)) {
+    try {
+      songData = JSON.parse(fs.readFileSync(songJsonPath, 'utf8'));
+    } catch (e) {
+      // ignore parse error
+    }
+  }
+  songData[songName] = genreValue;
+  fs.writeFileSync(songJsonPath, JSON.stringify(songData, null, 2), 'utf8');
+  
+  // 2. 更新 composer.json: {genre字段值: [歌名1, 歌名2]}
+  const composerJsonPath = path.join(dataPath, 'composer.json');
+  let composerData = {};
+  if (fs.existsSync(composerJsonPath)) {
+    try {
+      composerData = JSON.parse(fs.readFileSync(composerJsonPath, 'utf8'));
+    } catch (e) {
+      // ignore parse error
+    }
+  }
+  
+  const composers = genreValue.split('-').map(c => c.trim()).filter(c => c);
+  composers.forEach(composer => {
+    if (!composerData[composer]) {
+      composerData[composer] = [];
+    }
+    if (!composerData[composer].includes(songName)) {
+      composerData[composer].push(songName);
+    }
+  });
+  
+  fs.writeFileSync(composerJsonPath, JSON.stringify(composerData, null, 2), 'utf8');
+}
+
+function updateComposerInfoOnRename(oldName, newName) {
+  if (!oldName || !newName || oldName === newName) return;
+  
+  const songJsonPath = path.join(dataPath, 'songMeta.json');
+  let songData = {};
+  
+  // 1. 读取 songMeta.json
+  if (fs.existsSync(songJsonPath)) {
+    try {
+      songData = JSON.parse(fs.readFileSync(songJsonPath, 'utf8'));
+    } catch (e) {
+      // ignore parse error
+    }
+  }
+  
+  // 2. 获取 genre 值并更新 songMeta.json
+  const genreValue = songData[oldName];
+  if (genreValue !== undefined) {
+    songData[newName] = genreValue;
+    delete songData[oldName];
+    fs.writeFileSync(songJsonPath, JSON.stringify(songData, null, 2), 'utf8');
+    
+    // 3. 更新 composer.json 中对应的数组
+    const composerJsonPath = path.join(dataPath, 'composer.json');
+    if (fs.existsSync(composerJsonPath)) {
+      try {
+        const composerData = JSON.parse(fs.readFileSync(composerJsonPath, 'utf8'));
+        const composers = genreValue.split('-').map(c => c.trim()).filter(c => c);
+        
+        composers.forEach(composer => {
+          const songs = composerData[composer];
+          if (songs) {
+            const index = songs.indexOf(oldName);
+            if (index !== -1) {
+              songs[index] = newName;
+            }
+          }
+        });
+        
+        fs.writeFileSync(composerJsonPath, JSON.stringify(composerData, null, 2), 'utf8');
+      } catch (e) {
+        // ignore parse error
+      }
+    }
+  }
+}
+
 router.get('/', function(req, res) {
   res.sendFile(path.join(__dirname, '../views/song_admin.html'));
 });
@@ -310,6 +397,17 @@ router.get('/dir', function(req, res) {
     const lightPath = path.join(musicPath, 'Light');
     const lightExists = fs.existsSync(lightPath) && fs.statSync(lightPath).isDirectory();
 
+    // 读取 song.json 获取作曲人信息
+    const songJsonPath = path.join(dataPath, 'songMeta.json');
+    let composerMap = {};
+    if (fs.existsSync(songJsonPath)) {
+      try {
+        composerMap = JSON.parse(fs.readFileSync(songJsonPath, 'utf8'));
+      } catch (e) {
+        composerMap = {};
+      }
+    }
+
     for (const file of files) {
       if (file.startsWith('.')) continue;
       
@@ -331,6 +429,13 @@ router.get('/dir', function(req, res) {
         }
       }
 
+      // 获取文件的作曲人信息
+      let composer = '';
+      if (fileStat.isFile()) {
+        const songName = path.basename(file, path.extname(file));
+        composer = composerMap[songName] || '';
+      }
+
       result.push({
         name: file,
         path: relPath,
@@ -339,7 +444,8 @@ router.get('/dir', function(req, res) {
         size: fileStat.size,
         modified: fileStat.mtime,
         linkedIn: linkedIn,
-        isPure: isPure
+        isPure: isPure,
+        composer: composer
       });
     }
 
@@ -413,6 +519,13 @@ router.post('/rename-file', function(req, res) {
       const newLinkPath = path.join(linkDir, newName);
       const newLinkTarget = path.relative(linkDir, newFullPath);
       fs.symlinkSync(newLinkTarget, newLinkPath);
+    }
+
+    // 更新 song.json 和 composer.json 中的歌名
+    if (stat.isFile()) {
+      const oldSongName = path.basename(relPath, path.extname(relPath));
+      const newSongName = path.basename(newName, path.extname(newName));
+      updateComposerInfoOnRename(oldSongName, newSongName);
     }
 
     res.json({ success: true });
@@ -711,12 +824,30 @@ router.get('/playlist', function(req, res) {
 
     const content = fs.readFileSync(playlistPath, 'utf8');
     const lines = content.split('\n').filter(line => line.trim());
+
+    // 读取 songMeta.json 获取作曲人信息
+    const songJsonPath = path.join(dataPath, 'songMeta.json');
+    let composerMap = {};
+    if (fs.existsSync(songJsonPath)) {
+      try {
+        composerMap = JSON.parse(fs.readFileSync(songJsonPath, 'utf8'));
+      } catch (e) {
+        composerMap = {};
+      }
+    }
+
     const songs = lines.map((line, index) => {
       const parts = line.split('|');
+      const filePath = parts[0] || '';
+      const songName = path.basename(filePath, path.extname(filePath));
+      
+      
+
       return {
         index: index + 1,
-        path: parts[0] || '',
-        title: parts[1] || path.basename(parts[0] || '')
+        path: filePath,
+        title: parts[1] || path.basename(filePath),
+        composer: composerMap[songName] || ''
       };
     });
 
@@ -1007,6 +1138,12 @@ router.post('/metadata', async function(req, res) {
       const fileBuffer = fs.readFileSync(fullPath);
       const newBuffer = ID3.write(tags, fileBuffer);
       fs.writeFileSync(fullPath, newBuffer);
+    }
+
+    // 如果 genre 有值，保存作曲人信息到 song.json 和 composer.json
+    if (metadata.genre && metadata.genre.trim()) {
+      const songName = path.basename(filePath, path.extname(filePath));
+      saveComposerInfo(songName, metadata.genre.trim());
     }
 
     res.json({ success: true, message: '保存成功' });

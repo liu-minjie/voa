@@ -1095,6 +1095,7 @@ function renderPlaylist() {
       <div class="playlist-info">
         <div class="playlist-title">${escapeHtml(song.title)}</div>
         <div class="playlist-path">${escapeHtml(song.path)}</div>
+        <div class="meta-row">${song.composer ? song.composer.split('-').map(c => c.trim() ? `<span class="composer-tag">${escapeHtml(c.trim())}</span>` : '').join('') : ''}${song.size ? `<span class="size-tag">${formatFileSize(song.size)}</span>` : ''}</div>
       </div>
       <button class="btn btn-sm btn-info" onclick="event.stopPropagation(); showMetadataModal('${escapeHtmlAttr(song.path)}')">信息</button>
     </div>
@@ -1329,8 +1330,9 @@ async function loadDir(dir = '') {
           <div class="dir-item ${item.isDirectory ? 'folder' : 'file'}" data-name="${escapeHtmlAttr(item.name)}" onclick="${item.isDirectory ? `loadDir('${escapeHtmlAttr(item.path)}')` : ``}">
             ${isBatchSelectMode ? `<input type="checkbox" ${selectedMoveFiles.has(item.path) ? 'checked' : ''} onclick="event.stopPropagation(); toggleFileSelect('${escapeHtmlAttr(item.path)}')" style="margin-right:8px;transform:scale(1.2);">` : ''}
             <div class="item-info" ${!item.isDirectory ? `onclick="event.stopPropagation(); playMusic('${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.name)}')"` : ''}>
-              <div class="name" ${!item.isDirectory && item.size < 1048576 ? 'style="color:#e53935;"' : ''}>${escapeHtml(item.name)} ${!item.isDirectory ? `<span style="font-size:11px;color:#999;font-weight:normal;">(${formatFileSize(item.size)})</span>` : ''}${item.isDirectory && item.linkedIn && item.linkedIn.length > 0 ? `<span class="linked-tag">${escapeHtml(item.linkedIn.join(', '))}</span>` : ''}${item.isDirectory && item.isPure ? `<span class="pure-tag">pure</span>` : ''}</div>
+              <div class="name" ${!item.isDirectory && item.size < 1048576 ? 'style="color:#e53935;"' : ''}>${escapeHtml(item.name)}${item.isDirectory && item.linkedIn && item.linkedIn.length > 0 ? `<span class="linked-tag">${escapeHtml(item.linkedIn.join(', '))}</span>` : ''}${item.isDirectory && item.isPure ? `<span class="pure-tag">pure</span>` : ''}</div>
               <div class="path">${escapeHtml(item.path)}</div>
+              ${!item.isDirectory ? `<div class="meta-row">${item.composer ? item.composer.split('-').map(c => c.trim() ? `<span class="composer-tag">${escapeHtml(c.trim())}</span>` : '').join('') : ''}<span class="size-tag">${formatFileSize(item.size)}</span></div>` : ''}
             </div>
             <div class="custom-select" onclick="event.stopPropagation()">
               <select onchange="handleDirSelectAction(this, '${escapeHtmlAttr(item.path)}', '${escapeHtmlAttr(item.name)}', ${item.isDirectory})">
