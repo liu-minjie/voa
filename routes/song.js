@@ -1153,4 +1153,105 @@ router.post('/metadata', async function(req, res) {
   }
 });
 
+router.get('/batch-update-composers', async function(req, res) {
+  try {
+    const testJsonPath = path.join(__dirname, '../test.json');
+    if (!fs.existsSync(testJsonPath)) {
+      return res.json({ success: false, message: 'test.json 不存在' });
+    }
+
+    const testData = JSON.parse(fs.readFileSync(testJsonPath, 'utf8'));
+    const results = {
+      success: [],
+      failed: [],
+      notFound: []
+    };
+
+    // 遍历一级 key（如 "A"）
+    for (const [letter, artists] of Object.entries(testData)) {
+      const letterDir = path.join(musicPath, letter);
+      if (!fs.existsSync(letterDir)) {
+        results.notFound.push({ letter, reason: `目录 ${letterDir} 不存在` });
+        continue;
+      }
+
+      // 读取该目录下的所有子文件夹
+      const folders = fs.readdirSync(letterDir).filter(f => {
+        return fs.statSync(path.join(letterDir, f)).isDirectory();
+      });
+
+      // 遍历二级 key（如 "阿宝"）
+      for (const [artistName, songs] of Object.entries(artists)) {
+        // 查找匹配的文件夹
+        const matchedFolder = folders.find(folder => {
+          const processedName = folder.split('(')[0].split('-')[0].trim();
+          return processedName === artistName;
+        });
+
+        if (!matchedFolder) {
+          results.notFound.push({
+            letter,
+            artist: artistName,
+            reason: `在 ${letterDir} 下找不到匹配 "${artistName}" 的文件夹`
+          });
+          continue;
+        }
+
+        // 遍历三级 key（歌名），查找 MP3 文件
+        for (const [songName, composer] of Object.entries(songs)) {
+          const mp3FileName = `${artistName}-${songName}.mp3`;
+          const mp3FilePath = path.join(letterDir, matchedFolder, mp3FileName);
+
+          if (!fs.existsSync(mp3FilePath)) {
+            results.notFound.push({
+              letter,
+              artist: artistName,
+              song: songName
+            });
+            continue;
+          }
+
+          try {
+            // 写入 ID3 标签（作曲人写入 genre 字段）
+            writeCustomInfoToMP3(mp3FilePath, {}, { genre: composer });
+
+            // 更新 songMeta.json 和 composer.json
+            const songKey = `${artistName}-${songName}`;
+            saveComposerInfo(songKey, composer);
+
+            results.success.push({
+              letter,
+              artist: artistName,
+              song: songName,
+              composer,
+            });
+          } catch (err) {
+            results.failed.push({
+              letter,
+              artist: artistName,
+              song: songName,
+              composer,
+              error: err.message
+            });
+          }
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      summary: {
+        total: results.success.length + results.failed.length + results.notFound.length,
+        successCount: results.success.length,
+        failedCount: results.failed.length,
+        notFoundCount: results.notFound.length
+      },
+      results
+    });
+  } catch (err) {
+    console.error('Batch update composers error:', err);
+    res.json({ success: false, message: '批量更新失败: ' + err.message });
+  }
+});
+
 module.exports = router;
