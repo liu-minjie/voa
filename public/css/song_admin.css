@@ -234,6 +234,7 @@ body {
 
 #songList {
   height: 200px;
+  flex: unset;
   overflow-y: auto;
 }
 

@@ -1901,6 +1901,7 @@ async function loadSongList() {
                 <tr>
                   <td>${escapeHtml(song.filename)}</td>
                   <td>
+                    <button class="btn btn-sm" onclick="copySong('${escapeHtmlAttr(song.filename)}')">copy</button>
                     <button class="btn btn-sm" onclick="showEditSongModal(${song.id}, '${escapeHtmlAttr(song.filename)}')">编辑</button>
                     <button class="btn btn-sm btn-danger" onclick="deleteSong(${song.id})">删除</button>
                   </td>
@@ -1954,6 +1955,14 @@ async function confirmEditSong() {
   } catch (err) {
     showToast('更新失败: ' + err.message);
   }
+}
+
+function copySong(text) {
+  navigator.clipboard.writeText(text).then(() => {
+        showToast('已复制文件名');
+      }).catch(() => {
+        showToast('复制失败');
+      });
 }
 
 async function deleteSong(id) {
