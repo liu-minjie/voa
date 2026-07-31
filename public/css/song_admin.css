@@ -21,7 +21,9 @@ body {
   border-bottom: 1px solid #eee;
   flex-shrink: 0;
 }
-.section:last-child {
+.section.dir-section {
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
