@@ -984,57 +984,102 @@ function readCustomInfoFromMP3(filePath) {
   }
 }
 
+function buildTextFrame(frameId, value, useSyncsafe = false) {
+  const valBuf = Buffer.from(value, 'utf8');
+  const contentLen = 1 + valBuf.length;
+  const frame = Buffer.alloc(10 + contentLen);
+  frame.write(frameId, 0, 'ascii');
+  if (useSyncsafe) {
+    const sizeBytes = encodeSize(contentLen);
+    frame[4] = sizeBytes[0];
+    frame[5] = sizeBytes[1];
+    frame[6] = sizeBytes[2];
+    frame[7] = sizeBytes[3];
+  } else {
+    frame.writeUInt32BE(contentLen, 4);
+  }
+  frame[8] = 0;
+  frame[9] = 0;
+  frame[10] = 0x03;
+  valBuf.copy(frame, 11);
+  return frame;
+}
+
 function writeCustomInfoToMP3(filePath, customInfo, newTags = {}) {
   const buffer = fs.readFileSync(filePath);
   
   let existingId3Size = 0;
   let audioStart = 0;
   let id3Version = 3;
+  let originalFrames = [];
   
   if (buffer.length >= 10 && buffer.toString('ascii', 0, 3) === 'ID3') {
     id3Version = buffer[3];
     existingId3Size = decodeSize([buffer[6], buffer[7], buffer[8], buffer[9]]);
     audioStart = 10 + existingId3Size;
-  }
-  
-  const id3Tag = ID3.read(buffer);
-  
-  const standardTags = {};
-  if (newTags.title !== undefined) standardTags.title = newTags.title || undefined;
-  else if (id3Tag.title) standardTags.title = id3Tag.title;
-  if (newTags.artist !== undefined) standardTags.artist = newTags.artist || undefined;
-  else if (id3Tag.artist) standardTags.artist = id3Tag.artist;
-  if (newTags.album !== undefined) standardTags.album = newTags.album || undefined;
-  else if (id3Tag.album) standardTags.album = id3Tag.album;
-  if (newTags.genre !== undefined) standardTags.genre = newTags.genre || undefined;
-  else if (id3Tag.genre) standardTags.genre = id3Tag.genre;
-  if (newTags.year !== undefined) standardTags.year = newTags.year || undefined;
-  else if (id3Tag.year) standardTags.year = id3Tag.year;
-  if (newTags.trackNumber !== undefined) standardTags.trackNumber = newTags.trackNumber || undefined;
-  else if (id3Tag.trackNumber) standardTags.trackNumber = id3Tag.trackNumber;
-  if (newTags.partOfSet !== undefined) standardTags.partOfSet = newTags.partOfSet || undefined;
-  else if (id3Tag.partOfSet) standardTags.partOfSet = id3Tag.partOfSet;
-  
-  const originalAudio = buffer.slice(audioStart);
-  const resultBuffer = ID3.write(standardTags, originalAudio);
-  
-  let newId3Tag;
-  let newId3Size;
-  
-  if (resultBuffer.length >= 10 && resultBuffer.toString('ascii', 0, 3) === 'ID3') {
-    newId3Size = decodeSize([resultBuffer[6], resultBuffer[7], resultBuffer[8], resultBuffer[9]]);
-    newId3Tag = resultBuffer.slice(0, 10 + newId3Size);
-    id3Version = resultBuffer[3];
-  } else {
-    newId3Tag = resultBuffer;
-    newId3Size = resultBuffer.length;
+    
+    const id3v2Buffer = buffer.slice(0, audioStart);
+    let offset = 10;
+    const endOffset = audioStart;
+    
+    while (offset + 10 <= endOffset) {
+      const frameId = id3v2Buffer.toString('ascii', offset, offset + 4);
+      if (frameId === '\x00\x00\x00\x00') break;
+      
+      let frameSize;
+      if (id3Version >= 4) {
+        frameSize = decodeSize([id3v2Buffer[offset + 4], id3v2Buffer[offset + 5], id3v2Buffer[offset + 6], id3v2Buffer[offset + 7]]);
+      } else {
+        frameSize = id3v2Buffer.readUInt32BE(offset + 4);
+      }
+      
+      if (frameSize <= 0 || offset + 10 + frameSize > endOffset) break;
+      
+      if (frameId !== 'TXXX' || id3v2Buffer.toString('utf8', offset + 11, offset + 11 + 10) !== 'customInfo') {
+        originalFrames.push(id3v2Buffer.slice(offset, offset + 10 + frameSize));
+      }
+      offset += 10 + frameSize;
+    }
   }
   
   const useSyncsafe = id3Version >= 4;
-  const txxxFrame = buildTXXXFrame('customInfo', JSON.stringify(customInfo), useSyncsafe);
-  const newTagContent = Buffer.concat([newId3Tag.slice(10), txxxFrame]);
+  const id3Tag = ID3.read(buffer) || {};
+  const updatedFrames = [];
   
+  const tagFieldMap = {
+    title: 'TIT2',
+    artist: 'TPE1',
+    album: 'TALB',
+    genre: 'TCON',
+    year: 'TDRC',
+    trackNumber: 'TRCK',
+    partOfSet: 'TPOS'
+  };
+  
+  const updatedFrameIds = new Set();
+  for (const [field, frameId] of Object.entries(tagFieldMap)) {
+    let value;
+    if (newTags[field] !== undefined) value = newTags[field];
+    else if (id3Tag[field]) value = id3Tag[field];
+    
+    if (value) {
+      updatedFrames.push(buildTextFrame(frameId, String(value), useSyncsafe));
+      updatedFrameIds.add(frameId);
+    }
+  }
+  
+  for (const frameBuf of originalFrames) {
+    const fid = frameBuf.toString('ascii', 0, 4);
+    if (!updatedFrameIds.has(fid)) {
+      updatedFrames.push(frameBuf);
+    }
+  }
+  
+  updatedFrames.push(buildTXXXFrame('customInfo', JSON.stringify(customInfo), useSyncsafe));
+  
+  const newTagContent = Buffer.concat(updatedFrames);
   const finalTagSize = newTagContent.length;
+  
   const finalHeader = Buffer.alloc(10);
   finalHeader.write('ID3', 0, 'ascii');
   finalHeader[3] = id3Version;
