@@ -1184,13 +1184,13 @@ function renderCustomInfo() {
 
 let metadataRowElement = null;
 
-async function showMetadataModal(filePath, event) {
+async function showMetadataModal(filePath, eventOrElement) {
   filePath = filePath.replace(/^music\//, '');
   metadataFilePath = filePath;
   
-  if (event) {
-    const btn = event.target;
-    metadataRowElement = btn.closest('.file-item') || btn.closest('.playlist-item');
+  if (eventOrElement) {
+    const element = eventOrElement.target || eventOrElement;
+    metadataRowElement = element.closest('.dir-item') || element.closest('.playlist-item');
   } else {
     metadataRowElement = null;
   }
@@ -1308,7 +1308,7 @@ function handleDirSelectAction(select, filePath, filename, isDirectory) {
       playMusic(filePath, filename, 'select');
       break;
     case 'info':
-      showMetadataModal(filePath);
+      showMetadataModal(filePath, select);
       break;
     case 'move':
       showMoveModal(filePath);
