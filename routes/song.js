@@ -1172,7 +1172,7 @@ router.post('/metadata', async function(req, res) {
     if (metadata.title !== undefined) tags.title = metadata.title;
     if (metadata.artist !== undefined) tags.artist = metadata.artist;
     if (metadata.album !== undefined) tags.album = metadata.album;
-    if (metadata.genre !== undefined) tags.genre = metadata.genre;
+    if (metadata.genre !== undefined) tags.genre = metadata.genre.replace(/\s*\/\s*/g, '-');
     if (metadata.year !== undefined) tags.year = metadata.year;
     if (metadata.track !== undefined) tags.trackNumber = metadata.track;
     if (metadata.disc !== undefined) tags.partOfSet = metadata.disc;
@@ -1186,9 +1186,9 @@ router.post('/metadata', async function(req, res) {
     }
 
     // 如果 genre 有值，保存作曲人信息到 songMeta.json 和 composer.json
-    if (metadata.genre && metadata.genre.trim()) {
+    if (tags.genre && tags.genre.trim()) {
       const songName = path.basename(filePath, path.extname(filePath));
-      saveComposerInfo(songName, metadata.genre.trim());
+      saveComposerInfo(songName, tags.genre.trim());
     }
 
     res.json({ success: true, message: '保存成功' });
