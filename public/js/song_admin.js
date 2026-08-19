@@ -923,6 +923,7 @@ function renderEmptySearch() {
   return `
     <div class="empty-actions">
       <button class="btn btn-primary" onclick="window.location.href='/todo'">Todo</button>
+      <button class="btn btn-info" onclick="showSongListModal()">待处理</button>
     </div>
   `;
 }
@@ -1875,48 +1876,92 @@ function startBatchMove() {
 
 let editingSongId = '';
 
+let allSongsCache = [];
+
 async function loadSongList() {
+  // 首页不再有 #songList，保留兼容空实现，实际通过 showSongListModal 加载
   const listDiv = document.getElementById('songList');
-  listDiv.innerHTML = '<div class="loading">加载中...</div>';
+  if (listDiv) {
+    listDiv.innerHTML = '<div class="loading">加载中...</div>';
+  }
 
   try {
     const res = await fetch('/song/list');
     const data = await res.json();
 
     if (data.success) {
-      const songs = data.data;
-      if (songs.length === 0) {
-        listDiv.innerHTML = '<div class="empty">暂无歌曲</div>';
-      } else {
-        listDiv.innerHTML = `
-          <table class="song-list-table">
-            <thead>
-              <tr>
-                <th>歌名</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${songs.map(song => `
-                <tr>
-                  <td>${escapeHtml(song.filename)}</td>
-                  <td>
-                    <button class="btn btn-sm" onclick="copySong('${escapeHtmlAttr(song.filename)}')">copy</button>
-                    <button class="btn btn-sm" onclick="showEditSongModal(${song.id}, '${escapeHtmlAttr(song.filename)}')">编辑</button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteSong(${song.id})">删除</button>
-                  </td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        `;
+      allSongsCache = data.data || [];
+      if (listDiv) {
+        renderSongListToContainer(listDiv, allSongsCache);
       }
-    } else {
+    } else if (listDiv) {
       listDiv.innerHTML = '<div class="empty">加载失败: ' + data.message + '</div>';
     }
   } catch (err) {
-    listDiv.innerHTML = '<div class="empty">加载失败: ' + err.message + '</div>';
+    if (listDiv) {
+      listDiv.innerHTML = '<div class="empty">加载失败: ' + err.message + '</div>';
+    }
   }
+}
+
+function renderSongListToContainer(container, songs) {
+  if (songs.length === 0) {
+    container.innerHTML = '<div class="empty">暂无歌曲</div>';
+    return;
+  }
+  container.innerHTML = `
+    <table class="song-list-table">
+      <thead>
+        <tr>
+          <th>歌名</th>
+          <th class="song-list-actions">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${songs.map(song => `
+          <tr>
+            <td>${escapeHtml(song.filename)}</td>
+            <td class="song-list-actions">
+              <button class="btn btn-sm" onclick="copySong('${escapeHtmlAttr(song.filename)}')">copy</button>
+              <button class="btn btn-sm" onclick="showEditSongModal(${song.id}, '${escapeHtmlAttr(song.filename)}')">编辑</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteSong(${song.id})">删除</button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function showSongListModal() {
+  document.getElementById('songListModal').classList.add('active');
+  document.getElementById('songListSearch').value = '';
+  const container = document.getElementById('songListContainer');
+  container.innerHTML = '<div class="loading">加载中...</div>';
+
+  fetch('/song/list').then(r => r.json()).then(data => {
+    if (data.success) {
+      allSongsCache = data.data || [];
+      renderSongListToContainer(container, allSongsCache);
+    } else {
+      container.innerHTML = '<div class="empty">加载失败: ' + data.message + '</div>';
+    }
+  }).catch(err => {
+    container.innerHTML = '<div class="empty">加载失败: ' + err.message + '</div>';
+  });
+}
+
+function closeSongListModal() {
+  document.getElementById('songListModal').classList.remove('active');
+}
+
+function filterSongList() {
+  const keyword = document.getElementById('songListSearch').value.trim().toLowerCase();
+  const container = document.getElementById('songListContainer');
+  const filtered = keyword
+    ? allSongsCache.filter(s => (s.filename || '').toLowerCase().includes(keyword))
+    : allSongsCache;
+  renderSongListToContainer(container, filtered);
 }
 
 function showEditSongModal(id, filename) {
