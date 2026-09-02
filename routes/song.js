@@ -1326,7 +1326,7 @@ router.post('/tmp', function(req, res) {
     const songJsonPath = path.join(dataPath, 'tmp.json');
     const songs = ensureJson('tmp.json', {});
     const data = req.body.data;
-    fs.writeFileSync(songJsonPath, JSON.stringify(_.merge(songData, data);, null, 2), 'utf8');
+    fs.writeFileSync(songJsonPath, JSON.stringify(_.merge(songData, data), null, 2), 'utf8');
   } catch (err) {
     success = false
   }
