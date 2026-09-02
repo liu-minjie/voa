@@ -5,6 +5,7 @@ const path = require('path');
 const config = require('../config');
 const dataPath = config.dataPath;
 const ffmpeg = require('fluent-ffmpeg');
+const _ = require('lodash');
 
 const musicPath = path.resolve(__dirname, '../../../music');
 
@@ -1297,6 +1298,43 @@ router.get('/batch-update-composers', async function(req, res) {
     console.error('Batch update composers error:', err);
     res.json({ success: false, message: '批量更新失败: ' + err.message });
   }
+});
+
+
+function crossDomain(req, res) {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+}
+
+router.get('/tmp', function(req, res) {
+  crossDomain(req, res);
+  try {
+    const songs = ensureJson('tmp.json', {});
+    res.json({ success: true, data: songs });
+  } catch (err) {
+    res.json({ success: false, message: err.message });
+  }
+});
+
+
+router.post('/tmp', function(req, res) {
+  crossDomain(req, res);
+  let success = true;
+  try {
+
+    const songJsonPath = path.join(dataPath, 'tmp.json');
+    const songs = ensureJson('tmp.json', {});
+    const data = req.body.data;
+    fs.writeFileSync(songJsonPath, JSON.stringify(_.merge(songData, data);, null, 2), 'utf8');
+  } catch (err) {
+    success = false
+  }
+
+  res.json({
+    success,
+    message: '更新' + (success ? '成功' : '失败')
+  });
 });
 
 module.exports = router;
