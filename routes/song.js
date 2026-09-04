@@ -1318,6 +1318,13 @@ router.get('/tmp', function(req, res) {
 });
 
 
+router.options('/tmp', function(req, res) {
+  crossDomain(req, res);
+  res.json({
+    success: true
+  });
+});
+
 router.post('/tmp', function(req, res) {
   crossDomain(req, res);
   let success = true;
@@ -1325,8 +1332,8 @@ router.post('/tmp', function(req, res) {
 
     const songJsonPath = path.join(dataPath, 'tmp.json');
     const songs = ensureJson('tmp.json', {});
-    const data = req.body.data;
-    fs.writeFileSync(songJsonPath, JSON.stringify(_.merge(songData, data), null, 2), 'utf8');
+    const data = req.body;
+    fs.writeFileSync(songJsonPath, JSON.stringify(_.merge(songs, data), null, 2), 'utf8');
   } catch (err) {
     success = false
   }
