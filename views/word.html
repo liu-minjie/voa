@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>单词本</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f7; min-height: 100vh; color: #333; }
+    .container { max-width: 640px; margin: 0 auto; padding: 12px; padding-bottom: 120px; }
+
+    /* header */
+    .header { display: flex; align-items: center; gap: 10px; padding: 12px 4px; flex-wrap: wrap; }
+    .header h1 { font-size: 20px; font-weight: 600; }
+    .header .total { font-size: 13px; color: #999; margin-left: auto; }
+
+    /* search */
+    .search-bar { display: flex; gap: 8px; margin-bottom: 12px; }
+    .search-bar select { padding: 12px 10px; border: 1px solid #e0e0e0; border-radius: 10px; font-size: 14px; background: #fff; outline: none; cursor: pointer; }
+    .search-bar input { flex: 1; padding: 12px 14px; border: 1px solid #e0e0e0; border-radius: 10px; font-size: 15px; outline: none; background: #fff; min-width: 0; }
+    .search-bar input:focus { border-color: #2196F3; }
+    .btn-random { padding: 0 16px; background: #FF9800; color: #fff; border: none; border-radius: 10px; font-size: 14px; cursor: pointer; white-space: nowrap; }
+    .btn-random:active { background: #F57C00; }
+
+    /* mode toggle */
+    .mode-switch { display: flex; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; }
+    .mode-switch button { padding: 6px 12px; border: none; background: transparent; font-size: 13px; cursor: pointer; color: #666; }
+    .mode-switch button.active { background: #4CAF50; color: #fff; }
+
+    /* card list */
+    .word-list { display: flex; flex-direction: column; gap: 10px; }
+    .card { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.04); position: relative; }
+    .card .type-tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 4px; margin-bottom: 10px; }
+    .card .type-tag.word { background: #e3f2fd; color: #1976d2; }
+    .card .type-tag.sentence { background: #fff3e0; color: #e65100; }
+    .card .main-text { font-size: 20px; font-weight: 600; line-height: 1.4; word-break: break-word; margin-bottom: 6px; cursor: pointer; }
+    .card .main-text:hover { color: #2196F3; }
+    .card .phonetic-line { font-size: 13px; color: #888; margin-bottom: 8px; }
+    .card .phonetic-line span { margin-right: 10px; }
+    .card .sub-text { font-size: 15px; color: #555; line-height: 1.5; word-break: break-word; }
+    .card .sub-text-inner { white-space: pre-wrap; }
+    .card .actions { position: absolute; top: 12px; right: 12px; display: flex; gap: 6px; }
+    .card .actions button { padding: 4px 10px; border: 1px solid #ddd; background: #fff; border-radius: 6px; font-size: 12px; cursor: pointer; color: #666; }
+    .card .actions .btn-reveal { color: #2196F3; border-color: #2196F3; }
+    .card .actions .btn-edit { color: #2196F3; border-color: #2196F3; }
+    .card .actions .btn-delete { color: #e53935; border-color: #e53935; }
+
+    .hidden { display: none !important; }
+    .speakable { cursor: pointer; }
+    .speakable:hover { color: #2196F3; }
+
+    .empty { text-align: center; padding: 60px 20px; color: #999; font-size: 14px; }
+    .load-more { text-align: center; padding: 20px; color: #999; font-size: 13px; }
+
+    /* floating buttons */
+    .fab-add { position: fixed; bottom: 24px; right: 20px; width: 56px; height: 56px; background: #2196F3; color: #fff; border: none; border-radius: 50%; font-size: 28px; box-shadow: 0 4px 12px rgba(33,150,243,0.4); cursor: pointer; z-index: 100; display: flex; align-items: center; justify-content: center; }
+    .fab-add:active { background: #1976D2; }
+
+    /* random overlay */
+    .random-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 200; display: none; align-items: center; justify-content: center; padding: 20px; }
+    .random-overlay.show { display: flex; }
+    .random-card { background: #fff; border-radius: 16px; padding: 24px; width: 100%; max-width: 420px; position: relative; }
+    .random-card .close { position: absolute; top: 12px; right: 14px; width: 30px; height: 30px; border: none; background: #f5f5f5; border-radius: 50%; cursor: pointer; font-size: 16px; color: #999; }
+    .random-card .word-title { font-size: 22px; font-weight: 600; line-height: 1.4; word-break: break-word; margin-bottom: 6px; cursor: pointer; }
+    .random-card .word-title:hover { color: #2196F3; }
+    .random-card .phonetic-line { font-size: 13px; color: #888; margin-bottom: 8px; }
+    .random-card .phonetic-line span { margin-right: 10px; }
+    .random-card .sub-text { font-size: 16px; color: #555; line-height: 1.5; word-break: break-word; }
+    .random-card .sub-text-inner { white-space: pre-wrap; }
+    .random-actions { display: flex; gap: 8px; margin-top: 16px; }
+    .random-actions button { flex: 1; padding: 10px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; }
+    .btn-reveal { background: #f0f0f0; color: #333; }
+    .btn-next { background: #FF9800; color: #fff; }
+    .btn-remember { background: #4CAF50; color: #fff; }
+    .btn-forget { background: #f0f0f0; color: #666; border: 1px solid #ddd; }
+
+    /* modal */
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 300; display: none; align-items: flex-end; }
+    .modal-overlay.show { display: flex; }
+    .modal-content { width: 100%; max-width: 500px; margin: 0 auto; background: #fff; border-radius: 16px 16px 0 0; padding: 20px; padding-bottom: calc(20px + env(safe-area-inset-bottom)); animation: slideUp 0.2s ease; }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .modal-title { font-size: 18px; font-weight: 500; }
+    .modal-close { width: 32px; height: 32px; border: none; background: #f5f5f5; border-radius: 50%; cursor: pointer; font-size: 16px; color: #666; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 14px; color: #666; margin-bottom: 6px; }
+    .form-group input, .form-group textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; outline: none; font-family: inherit; }
+    .form-group input:focus, .form-group textarea:focus { border-color: #2196F3; }
+    .form-group textarea { resize: vertical; min-height: 80px; }
+    .type-radio { display: flex; gap: 10px; }
+    .type-radio label { flex: 1; display: flex; align-items: center; justify-content: center; padding: 10px; border: 1px solid #ddd; border-radius: 8px; cursor: pointer; font-size: 14px; }
+    .type-radio input { display: none; }
+    .type-radio input:checked + span { color: #2196F3; font-weight: 600; }
+    .type-radio label:has(input:checked) { border-color: #2196F3; background: #e3f2fd; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+    .modal-actions button { flex: 1; padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 500; }
+    .btn-cancel { background: #f0f0f0; color: #666; }
+    .btn-submit { background: #2196F3; color: #fff; }
+    @media (min-width: 600px) {
+      .modal-overlay { align-items: center; justify-content: center; }
+      .modal-content { border-radius: 16px; padding-bottom: 20px; max-height: 85vh; overflow-y: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>单词本</h1>
+      <div class="mode-switch">
+        <button class="active" data-mode="en" onclick="switchMode('en')">英文</button>
+        <button data-mode="zh" onclick="switchMode('zh')">中文</button>
+      </div>
+      <span class="total" id="total">共 0 条</span>
+    </div>
+
+    <div class="search-bar">
+      <select id="typeSelect" onchange="switchType(this.value)">
+        <option value="all">全部</option>
+        <option value="word">单词</option>
+        <option value="sentence">句子</option>
+      </select>
+      <input type="text" id="keyword" placeholder="搜索英文或中文..." autocomplete="off" oninput="onSearchInput()">
+      <button class="btn-random" onclick="showRandom()">随机</button>
+    </div>
+
+    <div class="word-list" id="wordList">
+      <div class="empty">加载中...</div>
+    </div>
+    <div class="load-more" id="loadMore" style="display:none;"></div>
+  </div>
+
+  <button class="fab-add" onclick="openEditModal()">+</button>
+
+  <!-- random overlay -->
+  <div class="random-overlay" id="randomOverlay" onclick="if(event.target===this) closeRandom()">
+    <div class="random-card">
+      <button class="close" onclick="closeRandom()">×</button>
+      <div id="randomContent"></div>
+      <div class="random-actions">
+        <button class="btn-reveal" id="randomReveal" onclick="revealRandom()">查看</button>
+        <button class="btn-remember" id="randomRemember" onclick="markRemembered(true)">记住</button>
+        <button class="btn-forget" id="randomForget" onclick="markRemembered(false)">未记住</button>
+        <button class="btn-next" onclick="showRandom()">换一个</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- edit modal -->
+  <div class="modal-overlay" id="editModal" onclick="if(event.target===this) closeEditModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <span class="modal-title" id="modalTitle">新增</span>
+        <button class="modal-close" onclick="closeEditModal()">×</button>
+      </div>
+      <div class="form-group">
+        <label>类型</label>
+        <div class="type-radio">
+          <label><input type="radio" name="itemType" value="word" checked><span>单词</span></label>
+          <label><input type="radio" name="itemType" value="sentence"><span>句子</span></label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>英文</label>
+        <input type="text" id="editTitle" placeholder="输入英文...">
+      </div>
+      <div class="form-group">
+        <label>中文释义</label>
+        <textarea id="editTrans" placeholder="输入中文释义..."></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeEditModal()">取消</button>
+        <button class="btn-submit" onclick="submitEdit()">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let allItems = [];     // 全部数据（已打乱）
+    let visibleCount = 0;  // 当前已展示的条数
+    const pageSize = 20;
+    let currentType = 'all';
+    let currentMode = 'en'; // en: show English first, zh: show Chinese first
+    let keyword = '';
+    let searchTimer = null;
+    let isLoading = false;
+    let editingItem = null;
+    let randomItem = null;
+
+    // Fisher–Yates 洗牌
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    async function loadList() {
+      if (isLoading) return;
+      isLoading = true;
+      const listEl = document.getElementById('wordList');
+      const loadMoreEl = document.getElementById('loadMore');
+      listEl.innerHTML = '<div class="empty">加载中...</div>';
+      loadMoreEl.style.display = 'none';
+      try {
+        // 一次拉取全部，前端打乱顺序后分页展示
+        let url = `/word/list?page=1&pageSize=999999&type=${currentType}`;
+        if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.success) {
+          allItems = shuffle(data.data.list || []);
+          visibleCount = Math.min(pageSize, allItems.length);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+      isLoading = false;
+      renderList();
+    }
+
+    function loadMore() {
+      if (isLoading) return;
+      if (visibleCount >= allItems.length) return;
+      visibleCount = Math.min(visibleCount + pageSize, allItems.length);
+      renderList();
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text == null ? '' : String(text);
+      return div.innerHTML;
+    }
+
+    // 构建音标 HTML：仅单词且 us/uk 有值时显示
+    function buildPhoneticHtml(item) {
+      if (item.type !== 'word') return '';
+      const parts = [];
+      if (item.us) parts.push(`<span>美 /${escapeHtml(item.us)}/</span>`);
+      if (item.uk) parts.push(`<span>英 /${escapeHtml(item.uk)}/</span>`);
+      return parts.length ? `<div class="phonetic-line">${parts.join('')}</div>` : '';
+    }
+
+    function renderList() {
+      const listEl = document.getElementById('wordList');
+      const items = allItems.slice(0, visibleCount);
+      document.getElementById('total').textContent = `共 ${allItems.length} 条`;
+
+      if (items.length === 0) {
+        listEl.innerHTML = '<div class="empty">暂无数据</div>';
+        document.getElementById('loadMore').style.display = 'none';
+        return;
+      }
+
+      listEl.innerHTML = items.map((item, idx) => {
+        const showEn = currentMode === 'en';
+        const titleEmpty = !item.title || !String(item.title).trim();
+        const transEmpty = !item.trans || !String(item.trans).trim();
+        const phoneticHtml = buildPhoneticHtml(item);
+
+        const titleSpan = titleEmpty
+          ? '<span style="color:#ccc;">(空)</span>'
+          : `<span class="speakable" data-text="${escapeHtml(item.title)}">${escapeHtml(item.title)}</span>`;
+
+        // 音标跟随英文侧：英文模式下在主区域显示，中文模式下在查看后的副区域显示
+        let mainHtml, subHtml;
+        if (showEn) {
+          mainHtml = `
+            <div class="main-text">${titleSpan}</div>
+            ${phoneticHtml}
+          `;
+          subHtml = `<div class="sub-text-inner">${transEmpty ? '<span style="color:#ccc;">(空)</span>' : escapeHtml(item.trans)}</div>`;
+        } else {
+          mainHtml = `<div class="main-text">${transEmpty ? '<span style="color:#ccc;">(空)</span>' : escapeHtml(item.trans)}</div>`;
+          subHtml = `
+            ${phoneticHtml}
+            <div class="sub-text-inner">${titleSpan}</div>
+          `;
+        }
+
+        return `
+          <div class="card" data-idx="${idx}">
+            <div class="actions">
+              <button class="btn-reveal" onclick="toggleReveal(${idx})" id="reveal-${idx}">查看</button>
+              <button class="btn-edit" onclick="openEditModal(${idx})">编辑</button>
+              <button class="btn-delete" onclick="deleteItem(${idx})">删除</button>
+            </div>
+            <span class="type-tag ${item.type}">${item.type === 'word' ? '单词' : '句子'}${item.remembered ? ' · 已记住' : ''}</span>
+            ${mainHtml}
+            <div class="sub-text hidden" id="sub-${idx}">${subHtml}</div>
+          </div>
+        `;
+      }).join('');
+
+      const loadMoreEl = document.getElementById('loadMore');
+      if (visibleCount >= allItems.length) {
+        loadMoreEl.textContent = '没有更多了';
+        loadMoreEl.style.display = 'block';
+      } else {
+        loadMoreEl.textContent = '上拉加载更多';
+        loadMoreEl.style.display = 'block';
+      }
+    }
+
+    function toggleReveal(idx) {
+      const sub = document.getElementById(`sub-${idx}`);
+      const btn = document.getElementById(`reveal-${idx}`);
+      if (sub.classList.contains('hidden')) {
+        sub.classList.remove('hidden');
+        btn.textContent = '收起';
+      } else {
+        sub.classList.add('hidden');
+        btn.textContent = '查看';
+      }
+    }
+
+    function switchType(type) {
+      currentType = type;
+      const sel = document.getElementById('typeSelect');
+      if (sel) sel.value = type;
+      loadList();
+    }
+
+    function switchMode(mode) {
+      currentMode = mode;
+      document.querySelectorAll('.mode-switch button').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+      renderList();
+    }
+
+    function onSearchInput() {
+      keyword = document.getElementById('keyword').value.trim();
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => loadList(), 300);
+    }
+
+    // ===== 发音 =====
+    function playWord(text) {
+      if (!text) return;
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'en-US';
+        u.rate = 0.9;
+        window.speechSynthesis.speak(u);
+      }
+    }
+
+    // ===== 记住状态（存服务端 JSON）=====
+    function isRemembered(item) {
+      return !!item.remembered;
+    }
+    async function markRemembered(remembered) {
+      if (!randomItem) return;
+      try {
+        const res = await fetch(`/word/remember/${randomItem.type}/${randomItem.id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ remembered })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          alert(data.message || '操作失败');
+          return;
+        }
+        // 同步本地数据
+        randomItem.remembered = remembered;
+        const local = allItems.find(i => i.id === randomItem.id);
+        if (local) local.remembered = remembered;
+        // 标记后自动换一个
+        showRandom();
+      } catch (err) {
+        console.error(err);
+        alert('操作失败');
+      }
+    }
+
+    // 加权随机：记住的权重 1，未记住的权重 5（比例 1:5）
+    function weightedRandomPick(items) {
+      if (items.length === 0) return null;
+      const weights = items.map(item => item.remembered ? 1 : 5);
+      let total = 0;
+      for (const w of weights) total += w;
+      let r = Math.random() * total;
+      for (let i = 0; i < items.length; i++) {
+        r -= weights[i];
+        if (r <= 0) return items[i];
+      }
+      return items[items.length - 1];
+    }
+
+    async function showRandom() {
+      try {
+        // 复用已加载的全量数据；若为空则拉取
+        let pool = allItems;
+        if (!pool || pool.length === 0) {
+          const url = `/word/list?page=1&pageSize=999999&type=${currentType}`;
+          const res = await fetch(url);
+          const data = await res.json();
+          if (data.success) pool = data.data.list || [];
+        }
+        if (!pool || pool.length === 0) {
+          alert('没有数据');
+          return;
+        }
+        randomItem = weightedRandomPick(pool);
+        renderRandom();
+        document.getElementById('randomOverlay').classList.add('show');
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function renderRandom() {
+      if (!randomItem) return;
+      const showEn = currentMode === 'en';
+      const titleEmpty = !randomItem.title || !String(randomItem.title).trim();
+      const transEmpty = !randomItem.trans || !String(randomItem.trans).trim();
+      const phoneticHtml = buildPhoneticHtml(randomItem);
+      const tagBg = randomItem.type === 'word' ? '#e3f2fd' : '#fff3e0';
+      const tagColor = randomItem.type === 'word' ? '#1976d2' : '#e65100';
+      const tagText = randomItem.type === 'word' ? '单词' : '句子';
+      const remembered = isRemembered(randomItem);
+
+      const titleHtml = titleEmpty
+        ? '<span style="color:#ccc;">(空)</span>'
+        : `<span class="speakable" data-text="${escapeHtml(randomItem.title)}">${escapeHtml(randomItem.title)}</span>`;
+
+      let mainHtml, subHtml;
+      if (showEn) {
+        mainHtml = `
+          <div class="word-title">${titleHtml}</div>
+          ${phoneticHtml}
+        `;
+        subHtml = `<div class="sub-text-inner">${transEmpty ? '<span style="color:#ccc;">(空)</span>' : escapeHtml(randomItem.trans)}</div>`;
+      } else {
+        mainHtml = `<div class="word-title">${transEmpty ? '<span style="color:#ccc;">(空)</span>' : escapeHtml(randomItem.trans)}</div>`;
+        subHtml = `
+          ${phoneticHtml}
+          <div class="sub-text-inner">${titleHtml}</div>
+        `;
+      }
+
+      const content = document.getElementById('randomContent');
+      content.innerHTML = `
+        <span style="display:inline-block;font-size:11px;padding:2px 8px;border-radius:4px;margin-bottom:12px;background:${tagBg};color:${tagColor};">${tagText}${remembered ? ' · 已记住' : ''}</span>
+        ${mainHtml}
+        <div class="sub-text hidden" id="randomSub">${subHtml}</div>
+      `;
+      document.getElementById('randomReveal').textContent = '查看';
+    }
+
+    function revealRandom() {
+      const sub = document.getElementById('randomSub');
+      const btn = document.getElementById('randomReveal');
+      if (sub.classList.contains('hidden')) {
+        sub.classList.remove('hidden');
+        btn.textContent = '收起';
+      } else {
+        sub.classList.add('hidden');
+        btn.textContent = '查看';
+      }
+    }
+
+    function closeRandom() {
+      document.getElementById('randomOverlay').classList.remove('show');
+    }
+
+    function openEditModal(idx) {
+      editingItem = idx != null ? allItems[idx] : null;
+      document.getElementById('modalTitle').textContent = editingItem ? '编辑' : '新增';
+      document.getElementById('editTitle').value = editingItem ? editingItem.title : '';
+      document.getElementById('editTrans').value = editingItem ? (editingItem.trans || '') : '';
+      const typeVal = editingItem ? editingItem.type : 'word';
+      document.querySelector(`input[name="itemType"][value="${typeVal}"]`).checked = true;
+      document.getElementById('editModal').classList.add('show');
+    }
+
+    function closeEditModal() {
+      document.getElementById('editModal').classList.remove('show');
+      editingItem = null;
+    }
+
+    async function submitEdit() {
+      const title = document.getElementById('editTitle').value.trim();
+      const trans = document.getElementById('editTrans').value;
+      const type = document.querySelector('input[name="itemType"]:checked').value;
+      if (!title) {
+        alert('请输入英文');
+        return;
+      }
+      try {
+        let url, method, body;
+        if (editingItem) {
+          url = `/word/update/${editingItem.type}/${editingItem.id}`;
+          method = 'POST';
+          body = JSON.stringify({ title, trans });
+        } else {
+          url = '/word/add';
+          method = 'POST';
+          body = JSON.stringify({ title, trans, type });
+        }
+        const res = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body
+        });
+        const data = await res.json();
+        if (!data.success) {
+          alert(data.message || '操作失败');
+          return;
+        }
+        closeEditModal();
+        loadList();
+      } catch (err) {
+        console.error(err);
+        alert('操作失败');
+      }
+    }
+
+    async function deleteItem(idx) {
+      const item = allItems[idx];
+      if (!confirm(`确定要删除「${item.title || '(空)'}」吗？`)) return;
+      try {
+        const res = await fetch(`/word/delete/${item.type}/${item.id}`, { method: 'POST' });
+        const data = await res.json();
+        if (!data.success) {
+          alert(data.message || '删除失败');
+          return;
+        }
+        loadList();
+      } catch (err) {
+        console.error(err);
+        alert('删除失败');
+      }
+    }
+
+    function handleScroll() {
+      if (isLoading || visibleCount >= allItems.length) return;
+      const scrollTop = window.scrollY;
+      const windowHeight = window.innerHeight;
+      const docHeight = document.documentElement.scrollHeight;
+      if (scrollTop + windowHeight >= docHeight - 100) {
+        loadMore();
+      }
+    }
+
+    (function init() {
+      loadList();
+      window.addEventListener('scroll', handleScroll);
+      // 点击单词发音（事件委托，避免引号问题）
+      document.addEventListener('click', function (e) {
+        const el = e.target.closest('.speakable');
+        if (el && el.dataset.text) {
+          playWord(el.dataset.text);
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

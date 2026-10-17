@@ -206,7 +206,7 @@
   
 
   progfilename = data.name;
-  mp3filename = `/media/${data.month}/${encodeURI(data.name)}`
+  mp3filename = `/voa/media/${data.month}/${encodeURI(data.name)}`
   txt=' ';lrc=' ';mp3=' ';mp4='';vf='';
   tc=timeArr;
 
@@ -250,11 +250,17 @@ document.addEventListener('DOMContentLoaded', () => {
         .view-tool {
           position: absolute;
           top: 5px;
-          left: -20px;
+          left: -10px;
           width: 20px;
           z-index: 11;
           cursor: pointer;
           display: inline-block;
+        }
+        .view-tool.copy {
+          top: 20px;
+          left: unset;
+          right: 5px;
+          background: #ffff0088;
         }
         .lrc-tool.view {
           width: 50px;
@@ -269,6 +275,35 @@ document.addEventListener('DOMContentLoaded', () => {
         #lrc.view-all .lrc-tool {
           background-color: transparent !important;
         }
+        .word-picker-overlay {
+          position: fixed; inset: 0; background: #fff;
+          z-index: 9999; display: flex; flex-direction: column;
+        }
+        .word-picker-box {
+          background: #fff; width: 100%; height: 100%;
+          display: flex; flex-direction: column;
+        }
+        .word-picker-header {
+          padding: 12px 16px; border-bottom: 1px solid #eee; font-size: 15px;
+          display: flex; align-items: center; gap: 6px;
+        }
+        .word-picker-list { flex: 1; overflow-y: auto; padding: 8px 0; }
+        .wp-row {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 2px 16px; border-bottom: 1px solid #f5f5f5;
+        }
+        .wp-word { font-size: 16px; word-break: break-word; padding-right: 10px; }
+        .wp-check { width: 22px; height: 22px; }
+        .word-picker-footer {
+          display: flex; gap: 10px; padding: 12px 16px; border-top: 1px solid #eee;
+        }
+        .wp-cancel, .wp-add, .wp-confirm {
+          flex: 1; padding: 12px; border: none; border-radius: 8px;
+          font-size: 16px; cursor: pointer;
+        }
+        .wp-cancel { background: #eee; color: #333; }
+        .wp-add { background: #FF9800; color: #fff; }
+        .wp-confirm { background: #2196F3; color: #fff; }
       `
 
 
@@ -292,10 +327,16 @@ document.addEventListener('DOMContentLoaded', () => {
           item.appendChild(div);
           item.addEventListener('click', itemClick);
 
-          const span = document.createElement('div');
+          let span = document.createElement('div');
           span.innerText = '查';
           span.className = 'view-tool'
           span.addEventListener('click', spanClick);
+          item.appendChild(span);
+
+          span = document.createElement('div');
+          span.innerText = '复';
+          span.className = 'view-tool copy'
+          span.addEventListener('click', copyClick);
           item.appendChild(span);
         });
 
@@ -347,6 +388,139 @@ document.addEventListener('DOMContentLoaded', () => {
         event.stopPropagation();
         event.preventDefault();
         event.target.parentElement.classList.toggle('view');
+      }
+
+      function copyClick(event) {
+        event.stopPropagation();
+        event.preventDefault();
+        const line = event.target.parentElement;
+        const li = line.querySelector('li');
+        const text = li ? li.textContent.trim() : '';
+        const words = text.split(/\s+/).filter(w => w);
+        if (words.length === 0) return;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'word-picker-overlay';
+        overlay.innerHTML = `
+          <div class="word-picker-box">
+            <div class="word-picker-header">
+              <label style="display:flex;align-items:center;gap:6px;">
+                <input type="checkbox" class="wp-select-all"> 全选
+              </label>
+            </div>
+            <div class="word-picker-list">
+              ${words.map(w => `
+                <div class="wp-row">
+                  <span class="wp-word"></span>
+                  <input type="checkbox" class="wp-check">
+                </div>
+              `).join('')}
+            </div>
+            <div class="word-picker-footer">
+              <button class="wp-add">添加</button>
+              <button class="wp-cancel">取消</button>
+              <button class="wp-confirm">确定</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(overlay);
+
+        const rows = overlay.querySelectorAll('.wp-row');
+        rows.forEach((row, i) => {
+          row.querySelector('.wp-word').textContent = words[i];
+          row.querySelector('.wp-check').dataset.word = words[i];
+          row.addEventListener('click', (e) => {
+            if (e.target.classList.contains('wp-check')) return;
+            const cb = row.querySelector('.wp-check');
+            cb.checked = !cb.checked;
+            cb.dispatchEvent(new Event('change'));
+          });
+        });
+
+        const selectAll = overlay.querySelector('.wp-select-all');
+        const checks = [...overlay.querySelectorAll('.wp-check')];
+
+        // 范围选择：某行从未选中→选中时，若还有其他已选中行，把它们之间的都选中
+        let lastCheckedIdx = -1;
+        function onCheckChange(e) {
+          const idx = checks.indexOf(e.target);
+          if (e.target.checked) {
+            // 从未选中变选中
+            if (lastCheckedIdx >= 0 && lastCheckedIdx !== idx) {
+              const from = Math.min(lastCheckedIdx, idx);
+              const to = Math.max(lastCheckedIdx, idx);
+              for (let i = from; i <= to; i++) {
+                checks[i].checked = true;
+              }
+            }
+            lastCheckedIdx = idx;
+          } else {
+            // 取消选中：如果取消的是 lastCheckedIdx，找另一个已选中的作为锚点
+            if (idx === lastCheckedIdx) {
+              const other = checks.findIndex((c, j) => c.checked);
+              lastCheckedIdx = other;
+            }
+          }
+          selectAll.checked = checks.every(x => x.checked);
+        }
+        checks.forEach(c => c.addEventListener('change', onCheckChange));
+        selectAll.addEventListener('change', () => {
+          checks.forEach(c => c.checked = selectAll.checked);
+          if (selectAll.checked) lastCheckedIdx = checks.length - 1;
+          else lastCheckedIdx = -1;
+        });
+
+        overlay.addEventListener('click', (e) => {
+          if (e.target === overlay) overlay.remove();
+        });
+        overlay.querySelector('.wp-cancel').addEventListener('click', () => overlay.remove());
+
+        overlay.querySelector('.wp-add').addEventListener('click', async () => {
+          const selected = [...checks].filter(c => c.checked).map(c => c.dataset.word);
+          if (selected.length === 0) {
+            alert('请先选择单词');
+            return;
+          }
+          const text = selected.join(' ');
+          const type = selected.length > 3 ? 'sentence' : 'word';
+          try {
+            const res = await fetch('/word/add', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ title: text, trans: '', type })
+            });
+            const data = await res.json();
+            if (data.success) {
+              overlay.remove();
+            } else {
+              alert(data.message || '添加失败');
+            }
+          } catch (err) {
+            alert('添加失败：' + err.message);
+          }
+        });
+
+        overlay.querySelector('.wp-confirm').addEventListener('click', () => {
+          const selected = [...checks].filter(c => c.checked).map(c => c.dataset.word);
+          const text = selected.join(' ');
+          const done = () => overlay.remove();
+          if (navigator.clipboard) {
+            navigator.clipboard.writeText(text).then(done).catch(doFallback);
+          } else {
+            doFallback();
+          }
+          function doFallback() {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            ta.remove();
+            done();
+          }
+        });
       }
     })
 </script> 
