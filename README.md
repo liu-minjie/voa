@@ -114,3 +114,14 @@ https://192.168.0.111:3330/todo
 https://192.168.0.111:3330/voa
 https://192.168.0.111:3330/voa/lrc
 https://192.168.0.111:3330/public/baby/
+
+
+
+# tts
+
+docker run -d -e http_proxy="http://192.168.0.109:7892" -e https_proxy="http://192.168.0.109:7892"  --name melotts-server -p 8888:8080 -e DEFAULT_SPEED=1 -e DEFAULT_LANGUAGE=EN -e DEFAULT_SPEAKER_ID=EN-US timhagel/melotts-api-server
+
+curl http://192.168.0.111:8888/convert/tts \
+--header "Content-Type: application/json" \
+-d '{ "text": "Put input here" }' \
+--output "example.wav"

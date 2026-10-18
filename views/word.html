@@ -87,11 +87,6 @@
     .form-group input, .form-group textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; outline: none; font-family: inherit; }
     .form-group input:focus, .form-group textarea:focus { border-color: #2196F3; }
     .form-group textarea { resize: vertical; min-height: 80px; }
-    .type-radio { display: flex; gap: 10px; }
-    .type-radio label { flex: 1; display: flex; align-items: center; justify-content: center; padding: 10px; border: 1px solid #ddd; border-radius: 8px; cursor: pointer; font-size: 14px; }
-    .type-radio input { display: none; }
-    .type-radio input:checked + span { color: #2196F3; font-weight: 600; }
-    .type-radio label:has(input:checked) { border-color: #2196F3; background: #e3f2fd; }
     .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
     .modal-actions button { flex: 1; padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 500; }
     .btn-cancel { background: #f0f0f0; color: #666; }
@@ -161,12 +156,6 @@
       <div class="modal-header">
         <span class="modal-title" id="modalTitle">新增</span>
         <button class="modal-close" onclick="closeEditModal()">×</button>
-      </div>
-      <div class="form-group">
-        <div class="type-radio">
-          <label><input type="radio" name="itemType" value="word" checked><span>单词</span></label>
-          <label><input type="radio" name="itemType" value="sentence"><span>句子</span></label>
-        </div>
       </div>
       <div class="form-group">
         <input type="text" id="editTitle" placeholder="输入英文..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="onEditTitleInput()">
@@ -534,8 +523,6 @@
       document.getElementById('modalTitle').textContent = editingItem ? '编辑' : '新增';
       document.getElementById('editTitle').value = editingItem ? editingItem.title : '';
       document.getElementById('editTrans').value = editingItem ? (editingItem.trans || '') : '';
-      const typeVal = editingItem ? editingItem.type : 'word';
-      document.querySelector(`input[name="itemType"][value="${typeVal}"]`).checked = true;
       resetEditSearchResults();
       document.getElementById('editModal').classList.add('show');
     }
@@ -565,7 +552,9 @@
     async function submitEdit() {
       const title = document.getElementById('editTitle').value.trim();
       const trans = document.getElementById('editTrans').value;
-      const type = document.querySelector('input[name="itemType"]:checked').value;
+      // 类型由输入内容决定：按空格拆分超过 3 个词视为句子，否则为单词；编辑时保持原类型
+      const wordCount = title ? title.split(/\s+/).filter(Boolean).length : 0;
+      const type = editingItem ? editingItem.type : (wordCount > 3 ? 'sentence' : 'word');
       if (!title) {
         alert('请输入英文');
         return;
