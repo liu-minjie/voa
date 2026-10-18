@@ -11,7 +11,8 @@
 
     /* header */
     .header { display: flex; align-items: center; gap: 10px; padding: 12px 4px; flex-wrap: wrap; }
-    .header h1 { font-size: 20px; font-weight: 600; }
+    .header h1 { font-size: 20px; font-weight: 600; cursor: pointer; }
+    .header select { padding: 6px 8px; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 13px; background: #fff; outline: none; cursor: pointer; color: #333; }
     .header .total { font-size: 13px; color: #999; margin-left: auto; }
 
     /* search */
@@ -75,10 +76,9 @@
     .btn-forget { background: #f0f0f0; color: #666; border: 1px solid #ddd; }
 
     /* modal */
-    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 300; display: none; align-items: flex-end; }
-    .modal-overlay.show { display: flex; }
-    .modal-content { width: 100%; max-width: 500px; margin: 0 auto; background: #fff; border-radius: 16px 16px 0 0; padding: 20px; padding-bottom: calc(20px + env(safe-area-inset-bottom)); animation: slideUp 0.2s ease; }
-    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #fff; z-index: 300; display: none; }
+    .modal-overlay.show { display: block; }
+    .modal-content { width: 100%; height: 100%; background: #fff; padding: 20px; padding-bottom: calc(20px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; overflow: hidden; }
     .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
     .modal-title { font-size: 18px; font-weight: 500; }
     .modal-close { width: 32px; height: 32px; border: none; background: #f5f5f5; border-radius: 50%; cursor: pointer; font-size: 16px; color: #666; }
@@ -96,20 +96,30 @@
     .modal-actions button { flex: 1; padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 500; }
     .btn-cancel { background: #f0f0f0; color: #666; }
     .btn-submit { background: #2196F3; color: #fff; }
-    @media (min-width: 600px) {
-      .modal-overlay { align-items: center; justify-content: center; }
-      .modal-content { border-radius: 16px; padding-bottom: 20px; max-height: 85vh; overflow-y: auto; }
-    }
+
+    /* edit modal search results */
+    .search-results {  flex-direction: column; gap: 2px; margin-bottom: 14px; flex: 1; min-height: 0; overflow-y: auto; }
+    .search-results .result-item { padding: 8px 12px; background: #f7f7f9; border-radius: 6px; font-size: 14px; line-height: 1.4; cursor: pointer; }
+    .search-results .result-item:hover { background: #eef0f3; }
+    .search-results .r-tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; margin-right: 6px; }
+    .search-results .r-tag.word { background: #e3f2fd; color: #1976d2; }
+    .search-results .r-tag.sentence { background: #fff3e0; color: #e65100; }
+    .search-results .r-title { font-weight: 500; word-break: break-word; }
+    .search-results .r-empty { color: #999; font-size: 13px; padding: 6px 2px; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <h1>单词本</h1>
+      <h1 onclick="loadList()" title="点击刷新列表">单词本</h1>
       <div class="mode-switch">
         <button class="active" data-mode="en" onclick="switchMode('en')">英文</button>
         <button data-mode="zh" onclick="switchMode('zh')">中文</button>
       </div>
+      <select id="sortSelect" onchange="switchSort(this.value)">
+        <option value="random">随机</option>
+        <option value="recent">最近</option>
+      </select>
       <span class="total" id="total">共 0 条</span>
     </div>
 
@@ -153,20 +163,18 @@
         <button class="modal-close" onclick="closeEditModal()">×</button>
       </div>
       <div class="form-group">
-        <label>类型</label>
         <div class="type-radio">
           <label><input type="radio" name="itemType" value="word" checked><span>单词</span></label>
           <label><input type="radio" name="itemType" value="sentence"><span>句子</span></label>
         </div>
       </div>
       <div class="form-group">
-        <label>英文</label>
-        <input type="text" id="editTitle" placeholder="输入英文..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <input type="text" id="editTitle" placeholder="输入英文..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="onEditTitleInput()">
       </div>
       <div class="form-group">
-        <label>中文释义</label>
         <textarea id="editTrans" placeholder="输入中文释义..."></textarea>
       </div>
+      <div class="search-results" id="editSearchResults"></div>
       <div class="modal-actions">
         <button class="btn-cancel" onclick="closeEditModal()">取消</button>
         <button class="btn-submit" onclick="submitEdit()">确定</button>
@@ -180,6 +188,7 @@
     const pageSize = 20;
     let currentType = 'all';
     let currentMode = 'en'; // en: show English first, zh: show Chinese first
+    let sortMode = 'random'; // random: 随机排序, recent: 按添加时间排序
     let keyword = '';
     let searchTimer = null;
     let isLoading = false;
@@ -195,6 +204,15 @@
       return arr;
     }
 
+    // 按当前排序模式整理 allItems
+    function applySort() {
+      if (sortMode === 'recent') {
+        allItems.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      } else {
+        shuffle(allItems);
+      }
+    }
+
     async function loadList() {
       if (isLoading) return;
       isLoading = true;
@@ -203,13 +221,14 @@
       listEl.innerHTML = '<div class="empty">加载中...</div>';
       loadMoreEl.style.display = 'none';
       try {
-        // 一次拉取全部，前端打乱顺序后分页展示
+        // 一次拉取全部，前端按排序模式整理后分页展示
         let url = `/word/list?page=1&pageSize=999999&type=${currentType}`;
         if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
         const res = await fetch(url);
         const data = await res.json();
         if (data.success) {
-          allItems = shuffle(data.data.list || []);
+          allItems = data.data.list || [];
+          applySort();
           visibleCount = Math.min(pageSize, allItems.length);
         }
       } catch (err) {
@@ -327,10 +346,19 @@
       renderList();
     }
 
+    function switchSort(mode) {
+      sortMode = mode;
+      const sel = document.getElementById('sortSelect');
+      if (sel) sel.value = mode;
+      applySort();
+      visibleCount = Math.min(pageSize, allItems.length);
+      renderList();
+    }
+
     function onSearchInput() {
       keyword = document.getElementById('keyword').value.trim();
       clearTimeout(searchTimer);
-      searchTimer = setTimeout(() => loadList(), 300);
+      searchTimer = setTimeout(() => loadList(), 800);
     }
 
     // ===== 发音 =====
@@ -465,6 +493,42 @@
       document.getElementById('randomOverlay').classList.remove('show');
     }
 
+    // ===== 编辑浮层内实时搜索（在已加载的全量数据中，不区分大小写）=====
+    let editSearchTimer = null;
+    function onEditTitleInput() {
+      clearTimeout(editSearchTimer);
+      editSearchTimer = setTimeout(renderEditSearchResults, 300);
+    }
+    function renderEditSearchResults() {
+      const box = document.getElementById('editSearchResults');
+      const q = document.getElementById('editTitle').value.trim().toLowerCase();
+      if (!q) {
+        //box.style.display = 'none';
+        box.innerHTML = '';
+        return;
+      }
+      const matches = allItems.filter(item => {
+        const t = item.title ? String(item.title).toLowerCase() : '';
+        const tr = item.trans ? String(item.trans).toLowerCase() : '';
+        return t.includes(q) || tr.includes(q);
+      });
+      box.style.display = 'flex';
+      if (matches.length === 0) {
+        box.innerHTML = '<div class="r-empty">无匹配结果</div>';
+        return;
+      }
+      box.innerHTML = matches.map(item => `
+        <div class="result-item">
+          <span class="r-tag ${item.type}">${item.type === 'word' ? '单词' : '句子'}</span><span class="r-title speakable" data-text="${escapeHtml(item.title)}">${escapeHtml(item.title)}</span>
+        </div>
+      `).join('');
+    }
+    function resetEditSearchResults() {
+      const box = document.getElementById('editSearchResults');
+      //box.style.display = 'none';
+      box.innerHTML = '';
+    }
+
     function openEditModal(idx) {
       editingItem = idx != null ? allItems[idx] : null;
       document.getElementById('modalTitle').textContent = editingItem ? '编辑' : '新增';
@@ -472,12 +536,30 @@
       document.getElementById('editTrans').value = editingItem ? (editingItem.trans || '') : '';
       const typeVal = editingItem ? editingItem.type : 'word';
       document.querySelector(`input[name="itemType"][value="${typeVal}"]`).checked = true;
+      resetEditSearchResults();
       document.getElementById('editModal').classList.add('show');
     }
 
     function closeEditModal() {
       document.getElementById('editModal').classList.remove('show');
+      resetEditSearchResults();
       editingItem = null;
+    }
+
+    // 新增成功后把新数据插入本地列表（不刷新），并保证其可见
+    function insertNewItem(item) {
+      // 当前按类型筛选时，不匹配筛选条件的新数据不插入当前列表
+      if (currentType !== 'all' && item.type !== currentType) return;
+      let idx;
+      if (sortMode === 'recent') {
+        idx = 0;
+        allItems.unshift(item);
+      } else {
+        idx = Math.floor(Math.random() * (allItems.length + 1));
+        allItems.splice(idx, 0, item);
+      }
+      visibleCount = Math.max(visibleCount, idx + 1);
+      renderList();
     }
 
     async function submitEdit() {
@@ -489,18 +571,16 @@
         return;
       }
       try {
-        let url, method, body;
+        let url, body;
         if (editingItem) {
           url = `/word/update/${editingItem.type}/${editingItem.id}`;
-          method = 'POST';
           body = JSON.stringify({ title, trans });
         } else {
           url = '/word/add';
-          method = 'POST';
           body = JSON.stringify({ title, trans, type });
         }
         const res = await fetch(url, {
-          method,
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body
         });
@@ -509,8 +589,19 @@
           alert(data.message || '操作失败');
           return;
         }
-        closeEditModal();
-        loadList();
+        if (editingItem) {
+          // 编辑：只更新本地数据
+          editingItem.title = title;
+          editingItem.trans = trans;
+          closeEditModal();
+          renderList();
+        } else {
+          // 新增：把后端返回的数据插入页面
+          const newItem = data.data || {};
+          newItem.type = type;
+          closeEditModal();
+          insertNewItem(newItem);
+        }
       } catch (err) {
         console.error(err);
         alert('操作失败');
@@ -527,7 +618,10 @@
           alert(data.message || '删除失败');
           return;
         }
-        loadList();
+        // 只移除本地数据，不刷新列表
+        allItems.splice(idx, 1);
+        if (visibleCount > allItems.length) visibleCount = allItems.length;
+        renderList();
       } catch (err) {
         console.error(err);
         alert('删除失败');

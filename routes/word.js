@@ -39,6 +39,19 @@ function ensureIds(data) {
   return changed;
 }
 
+// 给没有添加时间的词条补上 createdAt（保持原文件顺序递增），返回是否有改动
+function ensureCreatedAt(data) {
+  let changed = false;
+  const base = Date.now();
+  for (let i = 0; i < data.length; i++) {
+    if (!data[i].createdAt) {
+      data[i].createdAt = base - (data.length - i);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 // 按 id 查找数组下标
 function findIndexById(data, id) {
   return data.findIndex((item) => item.id === id);
@@ -51,6 +64,8 @@ function getMergedList(keyword, type) {
 
   if (ensureIds(words)) writeJson(WORD_PATH, words);
   if (ensureIds(sentences)) writeJson(SENTENCE_PATH, sentences);
+  if (ensureCreatedAt(words)) writeJson(WORD_PATH, words);
+  if (ensureCreatedAt(sentences)) writeJson(SENTENCE_PATH, sentences);
 
   words = words.map((item) => ({
     id: item.id,
@@ -59,6 +74,7 @@ function getMergedList(keyword, type) {
     us: item.us,
     uk: item.uk,
     remembered: !!item.remembered,
+    createdAt: item.createdAt,
     type: 'word'
   }));
 
@@ -67,6 +83,7 @@ function getMergedList(keyword, type) {
     title: item.title,
     trans: item.trans,
     remembered: !!item.remembered,
+    createdAt: item.createdAt,
     type: 'sentence'
   }));
 
@@ -131,7 +148,7 @@ router.post('/add', function (req, res) {
     const filePath = isSentence ? SENTENCE_PATH : WORD_PATH;
     const data = readJson(filePath);
 
-    const exists = data.some((item) => String(item.title || '').trim() === titleStr);
+    const exists = data.some((item) => String(item.title || '').trim().toLowerCase() === titleStr.toLowerCase()); 
     if (exists) {
       return res.json({ success: false, message: '已存在，无需重复添加' });
     }
@@ -140,7 +157,8 @@ router.post('/add', function (req, res) {
       id: genId(),
       title: titleStr,
       trans: trans ? String(trans) : '',
-      remembered: false
+      remembered: false,
+      createdAt: Date.now()
     };
     if (!isSentence) {
       newItem.us = null;
@@ -148,7 +166,7 @@ router.post('/add', function (req, res) {
     }
     data.push(newItem);
     writeJson(filePath, data);
-    res.json({ success: true });
+    res.json({ success: true, data: newItem });
   } catch (err) {
     res.json({ success: false, message: err.message });
   }
