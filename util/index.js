@@ -68,7 +68,9 @@ util.dingding = function (data) {
 
 
 // 你的钉钉机器人 Webhook 地址
-const webhookUrl = 'https://oapi.dingtalk.com/robot/send?access_token=f22b41dd8c60f3d7258c56d80d45c82acf2743858f81247e264dc8a025db07c6';
+const dataPath = config.dataPath;
+
+const localConfig = require(path.join(dataPath, 'config.json'));
 
 export async function ding(msg) {
 
@@ -80,7 +82,7 @@ export async function ding(msg) {
   };
 
   try {
-    const response = await fetch(webhookUrl, {
+    const response = await fetch(localConfig.dingUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
