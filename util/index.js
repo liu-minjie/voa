@@ -1,5 +1,6 @@
 const log4js = require('log4js');
 const path = require('path');
+const https = require('https');
 const config = require('../config');
 const ChatBot = require('dingtalk-robot-sender');
 const robot = new ChatBot(require(path.join(config.dataPath, 'voa/dingding.json')));
@@ -72,7 +73,41 @@ const dataPath = config.dataPath;
 
 const localConfig = require(path.join(dataPath, 'config.json'));
 
-export async function ding(msg) {
+// Node 16 没有全局 fetch（Node 18 才有），用内置 https 模块发 POST JSON
+function postJson(url, body) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const payload = Buffer.from(body);
+    const req = https.request({
+      hostname: parsed.hostname,
+      port: parsed.port || 443,
+      path: parsed.pathname + parsed.search,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': payload.length
+      },
+      // 服务器是自签名证书，跳过证书校验（与 App 端 trustAllCertificates 行为一致）
+      rejectUnauthorized: false
+    }, (res) => {
+      let data = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(data);
+        } else {
+          reject(new Error(`HTTP ${res.statusCode}: ${data}`));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
+async function ding(msg) {
 
   const messageBody = {
     "msgtype": "text",
@@ -82,15 +117,14 @@ export async function ding(msg) {
   };
 
   try {
-    const response = await fetch(localConfig.dingUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(messageBody)
-    });
-    
-    const data = await response.json();
+    const response = await postJson(localConfig.dingUrl, JSON.stringify(messageBody));
+    let data;
+    try {
+      data = JSON.parse(response);
+    } catch (e) {
+      // 响应不是 JSON 时原样记录
+      data = response;
+    }
     console.log('发送结果：', data);
   } catch (error) {
     console.error('网络请求失败：', error);
