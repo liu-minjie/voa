@@ -67,4 +67,33 @@ util.dingding = function (data) {
 
 
 
+// 你的钉钉机器人 Webhook 地址
+const webhookUrl = 'https://oapi.dingtalk.com/robot/send?access_token=f22b41dd8c60f3d7258c56d80d45c82acf2743858f81247e264dc8a025db07c6';
+
+export async function ding(msg) {
+
+  const messageBody = {
+    "msgtype": "text",
+    "text": {
+      "content": 'growth: ' + msg
+    }
+  };
+
+  try {
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(messageBody)
+    });
+    
+    const data = await response.json();
+    console.log('发送结果：', data);
+  } catch (error) {
+    console.error('网络请求失败：', error);
+  }
+}
+util.ding = ding
+
 module.exports = util;

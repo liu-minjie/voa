@@ -25,7 +25,7 @@ docker run -d   --name srt_worker_final   -v /home/devops/english/voa:/app   my_
 ./frpc -c ./frpc.ini &
 
 [common]
-server_addr = 47.99.192.24
+server_addr = 47.110.126.171
 server_port = 7000
 token = xxxx
 [ssh-home]

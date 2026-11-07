@@ -3,6 +3,7 @@ const router = express.Router();
 const fs = require('fs');
 const path = require('path');
 const config = require('../config');
+const util = require('../util');
 const dataPath = config.dataPath;
 
 const todoPath = path.join(dataPath, 'todo.json');
@@ -143,6 +144,7 @@ router.post('/add', function(req, res) {
     
     writeFileSync(todoPath, { todos, categories, tags });
     res.json({ success: true });
+    util.ding(req.body.text)
   } catch (err) {
     res.json({ success: false, message: err.message });
   }
